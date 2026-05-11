@@ -11,9 +11,6 @@ namespace {
 constexpr uint32_t FAN_PWM_FREQ_HZ = 25000;
 constexpr uint8_t FAN_PWM_BITS = 8;
 constexpr uint8_t FAN_PWM_TOP = 255;
-#if !defined(ESP_ARDUINO_VERSION_MAJOR) || ESP_ARDUINO_VERSION_MAJOR < 3
-constexpr uint8_t FAN_PWM_CHANNEL = 0;
-#endif
 constexpr uint8_t FAN_MIN_RUNNING_PERCENT = 25;
 constexpr uint32_t FAN_STARTUP_ASSIST_MS = 5000;
 constexpr uint32_t FAN_RPM_SAMPLE_MS = 1000;
@@ -23,37 +20,21 @@ constexpr uint8_t FAN_TACH_PULSES_PER_REV = 2;
 constexpr uint32_t FAN_TACH_MIN_EDGE_US = 2000;
 constexpr uint8_t FAN_POWER_ON_LEVEL = HIGH;
 constexpr uint8_t FAN_POWER_OFF_LEVEL = LOW;
-
-bool attachFanPwm() {
-#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
-  return ledcAttach(Pins::FAN_PWM, FAN_PWM_FREQ_HZ, FAN_PWM_BITS);
-#else
-  ledcSetup(FAN_PWM_CHANNEL, FAN_PWM_FREQ_HZ, FAN_PWM_BITS);
-  ledcAttachPin(Pins::FAN_PWM, FAN_PWM_CHANNEL);
-  return true;
-#endif
 }
 
-void writeFanPwmCounts(uint8_t counts) {
-#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
-  ledcWrite(Pins::FAN_PWM, counts);
-#else
-  ledcWrite(FAN_PWM_CHANNEL, counts);
-#endif
-}
-}
-
-FanController *FanController::_instance = nullptr;
+FanController::FanController(uint32_t pwmPin, uint32_t tachPin, uint32_t powerPin, uint8_t pwmChannel)
+    : _pwmPin(pwmPin), _tachPin(tachPin), _powerPin(powerPin), _pwmChannel(pwmChannel) {}
 
 void FanController::begin() {
-  _instance = this;
-  pinMode(Pins::FAN_PWM, OUTPUT);
-  pinMode(Pins::FAN_POWER, OUTPUT);
-  pinMode(Pins::FAN_TACH, INPUT);
+  pinMode(_pwmPin, OUTPUT);
+  if (_powerPin != NO_POWER_PIN) {
+    pinMode(_powerPin, OUTPUT);
+  }
+  pinMode(_tachPin, INPUT);
   attachFanPwm();
   stop();
   resetTachWindow(millis());
-  attachInterrupt(digitalPinToInterrupt(Pins::FAN_TACH), FanController::tachIsr, FALLING);
+  attachInterruptArg(digitalPinToInterrupt(_tachPin), FanController::tachIsr, this, FALLING);
 }
 
 void FanController::update(uint32_t now) {
@@ -139,19 +120,30 @@ void FanController::stop() {
   resetTachWindow(millis());
 }
 
-void FanController::tachIsr() {
-  if (_instance == nullptr) {
+void FanController::tachIsr(void *arg) {
+  FanController *fan = static_cast<FanController *>(arg);
+  if (fan == nullptr) {
     return;
   }
 
   uint32_t nowUs = micros();
-  uint32_t deltaUs = nowUs - _instance->_lastTachUs;
+  uint32_t deltaUs = nowUs - fan->_lastTachUs;
   if (deltaUs >= FAN_TACH_MIN_EDGE_US) {
-    ++_instance->_tachPulses;
-    _instance->_lastTachUs = nowUs;
+    fan->_tachPulses = fan->_tachPulses + 1;
+    fan->_lastTachUs = nowUs;
   } else {
-    ++_instance->_tachRejected;
+    fan->_tachRejected = fan->_tachRejected + 1;
   }
+}
+
+bool FanController::attachFanPwm() {
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
+  return ledcAttach(_pwmPin, FAN_PWM_FREQ_HZ, FAN_PWM_BITS);
+#else
+  ledcSetup(_pwmChannel, FAN_PWM_FREQ_HZ, FAN_PWM_BITS);
+  ledcAttachPin(_pwmPin, _pwmChannel);
+  return true;
+#endif
 }
 
 uint8_t FanController::constrainedDuty(uint8_t percent) const {
@@ -163,7 +155,9 @@ uint8_t FanController::constrainedDuty(uint8_t percent) const {
 
 void FanController::writeFanPower(bool enabled) {
   _powerEnabled = enabled;
-  digitalWrite(Pins::FAN_POWER, enabled ? FAN_POWER_ON_LEVEL : FAN_POWER_OFF_LEVEL);
+  if (_powerPin != NO_POWER_PIN) {
+    digitalWrite(_powerPin, enabled ? FAN_POWER_ON_LEVEL : FAN_POWER_OFF_LEVEL);
+  }
 }
 
 void FanController::writeFanPwm(uint8_t fanHighPercent) {
@@ -175,6 +169,14 @@ void FanController::writeFanPwm(uint8_t fanHighPercent) {
   uint16_t fanHighCounts = (static_cast<uint16_t>(fanHighPercent) * FAN_PWM_TOP + 50) / 100;
   uint8_t invertedDriveCounts = FAN_PWM_TOP - static_cast<uint8_t>(fanHighCounts);
   writeFanPwmCounts(invertedDriveCounts);
+}
+
+void FanController::writeFanPwmCounts(uint8_t counts) {
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
+  ledcWrite(_pwmPin, counts);
+#else
+  ledcWrite(_pwmChannel, counts);
+#endif
 }
 
 void FanController::resetTachWindow(uint32_t now) {

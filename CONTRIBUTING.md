@@ -12,10 +12,13 @@ ReflowDesk is a desktop SMD reflow soldering hot plate controller. The current f
 
 - MAX6675 thermocouple temperature sensing.
 - ADS1115 based NTC temperature sensing.
+- Optional ADS1115 ALERT/RDY pin assignment for future firmware features.
 - OLED display user interface.
 - Rotary encoder input.
 - Heater control with time-windowed PID output.
 - Cooling fan PWM control, 12V fan power control, and tachometer feedback.
+- ReflowDesk AT-MK1 motherboard cooling fan PWM control and tachometer feedback.
+- ReflowDesk AT-MK1 dual NTC behavior: ambient NTC for PID compensation and motherboard NTC for ReflowDesk enclosure cooling.
 - Buzzer and status LED alerts.
 - NVS-based settings storage with save-skipping for unchanged settings.
 - Hardware selection and pin assignment through `src/config.h`.
@@ -55,11 +58,13 @@ ReflowDesk/
 |   |   `-- PCB/                               Motherboard and daughterboard PCB images
 |   |-- pinouts/                               ESP32, ESP32-S3, sensor, and module pinout diagrams
 |   |-- ReflowDesk_Daughterboard_v1/           ReflowDesk AT-MK1 Daughterboard v1 hardware package
+|   |   |-- bom/                               Interactive BOM for component placement and soldering tracking
 |   |   |-- gerbers/                           Daughterboard Gerber package directory
 |   |   |   `-- ReflowDesk_MK1_Daughterboard_v1.zip
 |   |   |-- schematics/                        Daughterboard Schematics directory
 |   |   |   `-- ReflowDesk_AT-MK1_Daughterboard_v1_SCH.pdf
 |   |-- ReflowDesk_v1/                         ReflowDesk AT-MK1 Motherboard v1 hardware package
+|   |   |-- bom/                               Interactive BOM for component placement and soldering tracking
 |   |   |-- gerbers/                           Motherboard Gerber package directory
 |   |   |   `-- ReflowDesk_AT-MK1_v1.zip
 |   |   |-- schematics/                        Motherboard Schematics directory
@@ -104,6 +109,12 @@ Current main environment:
 pio run -e development
 ```
 
+ReflowDesk AT-MK1 ESP32-S3 environment:
+
+```powershell
+pio run -e at-mk1
+```
+
 Upload:
 
 ```powershell
@@ -126,7 +137,7 @@ Hardware selection is controlled in `src/config.h`.
 
 Only one hardware target should be enabled at a time:
 
-- `AT_REFLOW_MK1`
+- `REFLOW_AT_MK1`
 - `FIREBEETLE2_ESP32E`
 
 Pin assignments must stay inside the matching hardware block in `src/config.h`. When changing pins, check the ESP32 restrictions already guarded in the file:
@@ -134,6 +145,8 @@ Pin assignments must stay inside the matching hardware block in `src/config.h`. 
 - Do not use GPIO6 to GPIO11. They are connected to the ESP32 flash chip.
 - Avoid GPIO12 for external circuits that can affect boot or flash voltage strapping.
 - Do not use GPIO34 to GPIO39 as outputs.
+
+For ReflowDesk AT-MK1, the firmware uses ESP32-S3 pin assignments, an 8 MB OTA partition layout, a second NTC channel for motherboard temperature, and a second PWM fan channel for motherboard cooling. For FireBeetle2 ESP32-E development hardware, the firmware uses a single ADS1115 NTC channel for ambient temperature/PID compensation.
 
 If a hardware change needs a new pin map, add it as a hardware target instead of scattering pin edits through the firmware.
 
@@ -145,6 +158,7 @@ The `hardware/` folder currently contains prototype manufacturing packages and r
 
 - Keep Gerber ZIP names versioned and descriptive.
 - Keep schematic PDF names matched to the corresponding PCB version.
+- Keep interactive BOM files under the matching board's `bom/` folder.
 - Add fabrication notes when manufacturing assumptions change.
 - Mention whether a Gerber package was checked against a specific PCB manufacturer's capabilities.
 - Ask users to inspect Gerbers again when ordering from a manufacturer other than the one used during design validation.
@@ -160,6 +174,8 @@ Do not assume KiCad source files are present in the repository. Hardware documen
 - Keep heater safety behavior conservative.
 - Make sure heater output is forced off during faults, aborts, invalid sensor states, and idle states.
 - Keep fan failure handling intact: failed cooling must show a warning and keep the heater off.
+- Keep AT-MK1 motherboard fan behavior independent from the hot-plate fan power switch. The motherboard fan is controlled by PWM and tach feedback only.
+- Keep motherboard NTC failure behavior configurable through `src/config.h`.
 - Use time-windowed heater control for PTC heating elements and SSR output. Do not replace this with high-frequency heater PWM unless the hardware is specifically redesigned for it.
 - Keep settings validation strict. Stored settings should be clamped to safe ranges before use.
 - Preserve NVS flash wear protection by avoiding unnecessary writes when settings have not changed.

@@ -10,26 +10,30 @@ The current hardware files are intended for prototype builds and validation of t
 
 ```text
 ReflowDesk/hardware/
-|-- images/                                 Project logos and PCB render/reference images
-|   |-- logos/                              ReflowDesk logo assets
+|-- images/                                  Project logos and PCB render/reference images
+|   |-- logos/                               ReflowDesk logo assets
 |   |   |-- ReflowDesk_logo_1.png
 |   |   |-- ReflowDesk_logo_2.png
 |   |   `-- ReflowDesk_Github_QR.png
-|   `-- PCB/                                PCB images grouped by board
-|       |-- ReflowDesk_AT-MK1/              Motherboard v1 PCB renders/images
-|       `-- ReflowDesk_MK1_Daughterboard/   Daughterboard v1 PCB renders/images
-|-- pinouts/                                Pinout diagrams for ESP32 boards, ESP32-S3 boards, and project modules
-|-- ReflowDesk_Daughterboard_v1/            ReflowDesk AT-MK1 Daughterboard v1 manufacturing and schematic files
+|   `-- PCB/                                 PCB images grouped by board
+|       |-- ReflowDesk_AT-MK1/               Motherboard v1 PCB renders/images
+|       `-- ReflowDesk_MK1_Daughterboard/    Daughterboard v1 PCB renders/images
+|-- pinouts/                                 Pinout diagrams for ESP32 boards, ESP32-S3 boards, and project modules
+|-- ReflowDesk_Daughterboard_v1/             ReflowDesk AT-MK1 Daughterboard v1 manufacturing and schematic files
+|   |-- bom/
+|   |   `-- ReflowDesk_AT-MK1_Daughterboard_v1.0_ibom.html Interactive BOM for component placement and assembly tracking
 |   |-- gerbers/
 |   |   `-- ReflowDesk_MK1_Daughterboard_v1.zip
 |   `-- schematics/
 |       `-- ReflowDesk_AT-MK1_Daughterboard_v1_SCH.pdf
-|-- ReflowDesk_v1/                          ReflowDesk AT-MK1 Motherboard v1 manufacturing and schematic files
+|-- ReflowDesk_v1/                           ReflowDesk AT-MK1 Motherboard v1 manufacturing and schematic files
+|   |-- bom/
+|   |   `-- ReflowDesk_AT-MK1_v1.0_ibom.html Interactive BOM for component placement and assembly tracking
 |   |-- gerbers/
 |   |   `-- ReflowDesk_AT-MK1_v1.zip
 |   `-- schematics/
 |       `-- ReflowDesk_AT-MK1_v1_SCH.pdf
-`-- README.md                               Documentation for the ReflowDesk hardware directory
+`-- README.md                                Documentation for the ReflowDesk hardware directory
 ```
 
 ---
@@ -38,10 +42,19 @@ ReflowDesk/hardware/
 
 | PCB | Purpose | Gerber Package | Schematic PDF |
 | --- | --- | --- | --- |
-| ReflowDesk AT-MK1 Motherboard v1 | Main controller board with MCU, power supply, heater control, fan control, and high-current AC/DC sections | `ReflowDesk_v1/gerbers/ReflowDesk_AT-MK1_v1.zip` | `ReflowDesk_v1/schematics/ReflowDesk_AT-MK1_v1_SCH.pdf` |
-| ReflowDesk AT-MK1 Daughterboard v1 | User input and feedback board with OLED, rotary encoder, room-temperature NTC, reset/flash buttons, status LED, and buzzer | `ReflowDesk_Daughterboard_v1/gerbers/ReflowDesk_MK1_Daughterboard_v1.zip` | `ReflowDesk_Daughterboard_v1/schematics/ReflowDesk_AT-MK1_Daughterboard_v1_SCH.pdf` |
+| ReflowDesk AT-MK1 Motherboard v1 | Main controller board with ESP32-S3, power supply, heater control, fan control, motherboard NTC sensing, and high-current AC/DC sections | `ReflowDesk_v1/gerbers/ReflowDesk_AT-MK1_v1.zip` | `ReflowDesk_v1/schematics/ReflowDesk_AT-MK1_v1_SCH.pdf` |
+| ReflowDesk AT-MK1 Daughterboard v1 | User input and feedback board with OLED, rotary encoder, ambient NTC, reset/flash buttons, status LED, and buzzer | `ReflowDesk_Daughterboard_v1/gerbers/ReflowDesk_MK1_Daughterboard_v1.zip` | `ReflowDesk_Daughterboard_v1/schematics/ReflowDesk_AT-MK1_Daughterboard_v1_SCH.pdf` |
 
 The ZIP files are intended to be uploaded directly to a PCB fabrication service. The schematic PDFs are included for review, wiring reference, and hardware validation.
+
+### Interactive BOM
+
+The `bom/` folders contain interactive HTML BOM files. These files can be opened in a browser during assembly to identify component locations, track soldering progress, and reduce placement mistakes.
+
+| PCB | BOM Location |
+| --- | --- |
+| Motherboard | `ReflowDesk_v1/bom/` |
+| Daughterboard | `ReflowDesk_Daughterboard_v1/bom/` |
 
 ---
 

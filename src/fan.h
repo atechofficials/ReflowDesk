@@ -13,6 +13,13 @@
 
 class FanController {
 public:
+  static constexpr uint32_t NO_POWER_PIN = 0xFFFFFFFFUL;
+
+  explicit FanController(uint32_t pwmPin = Pins::FAN_PWM,
+                         uint32_t tachPin = Pins::FAN_TACH,
+                         uint32_t powerPin = Pins::FAN_POWER,
+                         uint8_t pwmChannel = 0);
+
   void begin();
   void update(uint32_t now);
   void setSpeed(uint8_t percent);
@@ -26,13 +33,18 @@ public:
   bool failed() const { return _failed; }
 
 private:
-  static void tachIsr();
+  static void tachIsr(void *arg);
+  bool attachFanPwm();
   uint8_t constrainedDuty(uint8_t percent) const;
   void writeFanPower(bool enabled);
   void writeFanPwm(uint8_t fanHighPercent);
+  void writeFanPwmCounts(uint8_t counts);
   void resetTachWindow(uint32_t now);
 
-  static FanController *_instance;
+  const uint32_t _pwmPin;
+  const uint32_t _tachPin;
+  const uint32_t _powerPin;
+  const uint8_t _pwmChannel;
 
   volatile uint32_t _tachPulses = 0;
   volatile uint32_t _tachRejected = 0;

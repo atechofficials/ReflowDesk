@@ -16,15 +16,13 @@ constexpr uint8_t PLATE_STATUS_NO_COMM = 0x81;
 }
 
 SensorManager::SensorManager(TwoWire &wire)
-    : _plateThermo(Pins::MAX6675_CS, Pins::MAX6675_SO, Pins::MAX6675_SCK),
+    : _plateThermo(Pins::MAX6675_CS, Pins::SPI_MISO, Pins::SPI_SCK),
       _ambientAdc(ADS1115_I2C_ADDRESS, &wire) {}
 
 void SensorManager::begin() {
   _ambientAdcReady = _ambientAdc.begin();
   if (_ambientAdcReady) {
-    _ambientAdc.setGain(ADS1X15_GAIN_4096MV);
-    _ambientAdc.setMode(ADS1X15_MODE_SINGLE);
-    _ambientAdc.setDataRate(ADS1X15_DATARATE_4);
+    configureAmbientAdc();
   }
 #if REFLOW_DEBUG
   Serial.print(F("ADS1115 addr=0x"));
@@ -46,6 +44,9 @@ void SensorManager::update(uint32_t now, bool force) {
   }
   if (force || now - _lastAmbientMs >= Timing::AMBIENT_READ_MS) {
     readAmbient();
+#if REFLOW_HAS_BOARD_NTC
+    readBoard();
+#endif
     _lastAmbientMs = now;
   }
 }
@@ -81,31 +82,54 @@ void SensorManager::readPlate() {
 }
 
 void SensorManager::readAmbient() {
-  if (!_ambientAdcReady) {
-    _ambientAdcReady = _ambientAdc.begin();
-    if (!_ambientAdcReady) {
-      _sample.ambientReadOnce = true;
-      _sample.ambientOk = false;
-      _sample.ambientAdc = 0;
-      return;
-    }
-    _ambientAdc.setGain(ADS1X15_GAIN_4096MV);
-    _ambientAdc.setMode(ADS1X15_MODE_SINGLE);
-    _ambientAdc.setDataRate(ADS1X15_DATARATE_4);
+  readThermistor(ADS1115_AMBIENT_NTC_CHANNEL, _sample.ambientC, _sample.ambientOk, _sample.ambientReadOnce,
+                 _sample.ambientAdc);
+}
+
+void SensorManager::readBoard() {
+  readThermistor(ADS1115_BOARD_NTC_CHANNEL, _sample.boardC, _sample.boardOk, _sample.boardReadOnce,
+                 _sample.boardAdc);
+}
+
+bool SensorManager::ensureAmbientAdc() {
+  if (_ambientAdcReady) {
+    return true;
   }
 
-  int16_t raw = _ambientAdc.readADC(ADS1115_NTC_CHANNEL);
-  bool ok = false;
+  _ambientAdcReady = _ambientAdc.begin();
+  if (_ambientAdcReady) {
+    configureAmbientAdc();
+  }
+  return _ambientAdcReady;
+}
+
+void SensorManager::configureAmbientAdc() {
+  _ambientAdc.setGain(ADS1X15_GAIN_4096MV);
+  _ambientAdc.setMode(ADS1X15_MODE_SINGLE);
+  _ambientAdc.setDataRate(ADS1X15_DATARATE_4);
+}
+
+void SensorManager::readThermistor(uint8_t channel, float &temperatureC, bool &ok, bool &readOnce, uint16_t &adcRaw) {
+  if (!ensureAmbientAdc()) {
+    readOnce = true;
+    ok = false;
+    adcRaw = 0;
+    return;
+  }
+
+  int16_t raw = _ambientAdc.readADC(channel);
+  bool readingOk = false;
   float c = 0.0f;
   if (raw > 0) {
     float voltage = _ambientAdc.toVoltage(raw);
-    c = thermistorCelsius(voltage, ok);
+    c = thermistorCelsius(voltage, readingOk);
   }
-  _sample.ambientAdc = raw > 0 ? static_cast<uint16_t>(raw) : 0;
-  _sample.ambientReadOnce = true;
-  _sample.ambientOk = ok;
-  if (ok) {
-    _sample.ambientC = c;
+
+  adcRaw = raw > 0 ? static_cast<uint16_t>(raw) : 0;
+  readOnce = true;
+  ok = readingOk;
+  if (readingOk) {
+    temperatureC = c;
   }
 }
 

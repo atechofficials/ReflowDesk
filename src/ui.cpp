@@ -178,7 +178,8 @@ void UiManager::handleInput(const InputEvent &event, SettingsStore &settings, Re
 }
 
 void UiManager::draw(uint32_t now, const SettingsStore &settings, const ReflowController &reflow,
-                     const HeaterController &heater, const FanController &fan, const TemperatureSample &sample) {
+                     const HeaterController &heater, const FanController &fan, const TemperatureSample &sample,
+                     const FanController *boardFan) {
   if (now - _lastDrawMs < Timing::DISPLAY_MS) {
     return;
   }
@@ -193,7 +194,7 @@ void UiManager::draw(uint32_t now, const SettingsStore &settings, const ReflowCo
 
   switch (_screen) {
     case Screen::Home:
-      drawHome(settings.data(), reflow, heater, fan, sample);
+      drawHome(settings.data(), reflow, heater, fan, sample, boardFan);
       break;
     case Screen::Settings:
       drawSettings(settings);
@@ -212,7 +213,8 @@ void UiManager::draw(uint32_t now, const SettingsStore &settings, const ReflowCo
 }
 
 void UiManager::drawHome(const SettingsData &settings, const ReflowController &reflow,
-                         const HeaterController &heater, const FanController &fan, const TemperatureSample &sample) {
+                         const HeaterController &heater, const FanController &fan, const TemperatureSample &sample,
+                         const FanController *boardFan) {
   _display.setCursor(0, 0);
   _display.print(F("Plate "));
   printTempValue(_display, sample.plateC, sample.plateOk, 1);
@@ -228,6 +230,7 @@ void UiManager::drawHome(const SettingsData &settings, const ReflowController &r
   _display.setCursor(0, 12);
   _display.print(F("Stage: "));
   _display.print(reflow.stateName());
+  bool boardFanFailed = boardFan != nullptr && boardFan->failed();
   if (reflow.isFaultLike()) {
     _display.setCursor(0, 22);
     _display.print(F("Reason: "));
@@ -245,6 +248,11 @@ void UiManager::drawHome(const SettingsData &settings, const ReflowController &r
     } else {
       _display.print(F("Cooling fan on"));
     }
+  } else if (boardFanFailed) {
+    _display.setCursor(0, 22);
+    _display.print(F("Motherboard Cooling"));
+    _display.setCursor(0, 32);
+    _display.print(F("Fan Failed"));
   } else if (reflow.isActive() && reflow.state() != ReflowState::Cooling) {
     uint32_t elapsed = reflow.holdElapsedSeconds(millis());
     uint16_t total = reflow.holdTargetSeconds(settings);
@@ -269,7 +277,8 @@ void UiManager::drawHome(const SettingsData &settings, const ReflowController &r
     _display.print(F("C"));
   }
 
-  _display.setCursor(0, reflow.isFaultLike() ? 42 : 34);
+  uint8_t statusY = reflow.isFaultLike() ? 42 : (boardFanFailed ? 44 : 34);
+  _display.setCursor(0, statusY);
   _display.print(F("H:"));
   _display.print(heater.outputOn() ? F("ON ") : F("OFF"));
   _display.print(F(" "));
@@ -282,7 +291,8 @@ void UiManager::drawHome(const SettingsData &settings, const ReflowController &r
 
   bool mainMenuReady = reflow.state() == ReflowState::Idle && reflow.canStart(settings, sample);
   bool canAck = reflow.canAcknowledge(settings, sample, millis());
-  _display.setCursor(0, reflow.isFaultLike() ? 54 : 48);
+  uint8_t actionY = reflow.isFaultLike() ? 54 : (boardFanFailed ? 56 : 48);
+  _display.setCursor(0, actionY);
 
   if (reflow.isHeatingState()) {
     _display.print(F(">"));
@@ -293,6 +303,8 @@ void UiManager::drawHome(const SettingsData &settings, const ReflowController &r
     } else {
       _display.print(F("Cooling..."));
     }
+  } else if (boardFanFailed) {
+    _display.print(F("Check board fan"));
   } else if (reflow.state() == ReflowState::Cooling || !mainMenuReady) {
     _display.print(F("Cooling..."));
   } else {

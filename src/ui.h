@@ -26,13 +26,15 @@ public:
   void handleInput(const InputEvent &event, SettingsStore &settings, ReflowController &reflow,
                    AlertManager &alerts, const TemperatureSample &sample);
   void draw(uint32_t now, const SettingsStore &settings, const ReflowController &reflow,
-            const HeaterController &heater, const FanController &fan, const TemperatureSample &sample);
+            const HeaterController &heater, const FanController &fan, const TemperatureSample &sample,
+            const FanController *boardFan = nullptr);
 
 private:
   enum class Screen : uint8_t { Home, Settings, Edit, About, ResetConfirm };
 
   void drawHome(const SettingsData &settings, const ReflowController &reflow,
-                const HeaterController &heater, const FanController &fan, const TemperatureSample &sample);
+                const HeaterController &heater, const FanController &fan, const TemperatureSample &sample,
+                const FanController *boardFan);
   void drawSettings(const SettingsStore &settings);
   void drawEdit(const SettingsData &settings);
   void drawAbout();

@@ -17,13 +17,17 @@
 struct TemperatureSample {
   float plateC = 0.0f;
   float ambientC = 25.0f;
+  float boardC = 25.0f;
   bool plateOk = false;
   bool ambientOk = false;
+  bool boardOk = false;
   bool plateReadOnce = false;
   bool ambientReadOnce = false;
+  bool boardReadOnce = false;
   uint8_t plateStatus = 0;
   uint16_t plateRaw = 0;
   uint16_t ambientAdc = 0;
+  uint16_t boardAdc = 0;
 };
 
 class SensorManager {
@@ -37,6 +41,10 @@ public:
 private:
   void readPlate();
   void readAmbient();
+  void readBoard();
+  bool ensureAmbientAdc();
+  void configureAmbientAdc();
+  void readThermistor(uint8_t channel, float &temperatureC, bool &ok, bool &readOnce, uint16_t &adcRaw);
   float thermistorCelsius(float voltage, bool &ok) const;
 
   MAX6675 _plateThermo;

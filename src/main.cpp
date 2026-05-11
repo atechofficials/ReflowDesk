@@ -22,11 +22,68 @@ TwoWire AppWire(0);
 SettingsStore settings(AppWire);
 SensorManager sensors(AppWire);
 HeaterController heater;
+#if REFLOW_HAS_BOARD_FAN
+FanController fan(Pins::FAN_PWM, Pins::FAN_TACH, Pins::FAN_POWER, 0);
+FanController boardFan(Pins::FAN_PWM2, Pins::FAN_TACH2, FanController::NO_POWER_PIN, 1);
+#else
 FanController fan;
+#endif
 AlertManager alerts;
 InputManager input;
 ReflowController reflow(heater, fan, alerts);
 UiManager ui(AppWire);
+
+#if REFLOW_HAS_BOARD_FAN
+uint8_t boardFanDutyFor(float boardC) {
+  if (boardC >= BoardCooling::FAN_FULL_C) {
+    return BoardCooling::FAN_MAX_PERCENT;
+  }
+  if (boardC <= BoardCooling::FAN_ON_C) {
+    return BoardCooling::FAN_MIN_PERCENT;
+  }
+
+  float ratio = (boardC - BoardCooling::FAN_ON_C) / (BoardCooling::FAN_FULL_C - BoardCooling::FAN_ON_C);
+  float duty = BoardCooling::FAN_MIN_PERCENT +
+               ratio * (BoardCooling::FAN_MAX_PERCENT - BoardCooling::FAN_MIN_PERCENT);
+  return static_cast<uint8_t>(duty + 0.5f);
+}
+
+void updateBoardFan(uint32_t now, const TemperatureSample &sample) {
+  static bool boardFanActive = false;
+  boardFan.update(now);
+
+#if REFLOW_HAS_BOARD_NTC
+  if (sample.boardReadOnce && !sample.boardOk) {
+    boardFanActive = true;
+    boardFan.setSpeed(BoardCooling::FAN_NTC_FAIL_PERCENT);
+    return;
+  }
+
+  if (!sample.boardReadOnce) {
+    boardFanActive = false;
+    boardFan.stop();
+    return;
+  }
+
+  if (boardFanActive) {
+    if (sample.boardC <= BoardCooling::FAN_OFF_C) {
+      boardFanActive = false;
+      boardFan.stop();
+      return;
+    }
+  } else if (sample.boardC < BoardCooling::FAN_ON_C) {
+    boardFan.stop();
+    return;
+  }
+
+  boardFanActive = true;
+  boardFan.setSpeed(boardFanDutyFor(sample.boardC));
+#else
+  boardFanActive = false;
+  boardFan.stop();
+#endif
+}
+#endif
 
 #if REFLOW_DEBUG
 void printSettingsLine(const SettingsData &data) {
@@ -136,6 +193,16 @@ void printDebugLine(uint32_t now) {
   } else {
     Serial.print(F("ERR"));
   }
+#if REFLOW_HAS_BOARD_NTC
+  Serial.print(F(" board="));
+  if (sample.boardOk) {
+    Serial.print(sample.boardC, 1);
+  } else {
+    Serial.print(F("ERR"));
+  }
+  Serial.print(F(" boardAdc="));
+  Serial.print(sample.boardAdc);
+#endif
   Serial.print(F(" raw=0x"));
   Serial.print(sample.plateRaw, HEX);
   Serial.print(F(" status=0x"));
@@ -155,6 +222,15 @@ void printDebugLine(uint32_t now) {
   if (fan.failed()) {
     Serial.print(F(" fanFail=1"));
   }
+#if REFLOW_HAS_BOARD_FAN
+  Serial.print(F(" fan2="));
+  Serial.print(boardFan.speedPercent());
+  Serial.print(F(" rpm2="));
+  Serial.print(boardFan.rpm());
+  if (boardFan.failed()) {
+    Serial.print(F(" fan2Fail=1"));
+  }
+#endif
   Serial.println();
 }
 #endif
@@ -171,6 +247,9 @@ void setup() {
 #endif
 
   fan.begin();
+#if REFLOW_HAS_BOARD_FAN
+  boardFan.begin();
+#endif
   alerts.begin();
 
   AppWire.begin(Pins::I2C_SDA, Pins::I2C_SCL);
@@ -208,6 +287,9 @@ void loop() {
   ui.handleInput(event, settings, reflow, alerts, sample);
 
   reflow.update(now, settings.data(), sample);
+#if REFLOW_HAS_BOARD_FAN
+  updateBoardFan(now, sample);
+#endif
   if (!reflow.isHeatingState()) {
     heater.forceOff();
   }
@@ -217,7 +299,11 @@ void loop() {
   alerts.setBuzzerEnabled(settings.data().buzzerEnabled != 0);
   alerts.updateStatusLed(sample.plateC, settings.data(), reflow.isFaultLike());
   alerts.tick(now);
+#if REFLOW_HAS_BOARD_FAN
+  ui.draw(now, settings, reflow, heater, fan, sample, &boardFan);
+#else
   ui.draw(now, settings, reflow, heater, fan, sample);
+#endif
   if (!reflow.isHeatingState()) {
     heater.forceOff();
   }

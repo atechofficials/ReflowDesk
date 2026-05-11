@@ -12,13 +12,13 @@ constexpr uint8_t SSR_DRIVER_ON_LEVEL = HIGH;
 constexpr uint8_t SSR_DRIVER_OFF_LEVEL = LOW;
 
 void configureSsrOff() {
-  digitalWrite(Pins::SSR, SSR_DRIVER_OFF_LEVEL);
-  pinMode(Pins::SSR, OUTPUT);
+  digitalWrite(Pins::HEATER_CTRL, SSR_DRIVER_OFF_LEVEL);
+  pinMode(Pins::HEATER_CTRL, OUTPUT);
 }
 
 void configureSsrOn() {
-  pinMode(Pins::SSR, OUTPUT);
-  digitalWrite(Pins::SSR, SSR_DRIVER_ON_LEVEL);
+  pinMode(Pins::HEATER_CTRL, OUTPUT);
+  digitalWrite(Pins::HEATER_CTRL, SSR_DRIVER_ON_LEVEL);
 }
 
 void writeSsrElectrical(bool on) {
@@ -30,7 +30,7 @@ void writeSsrElectrical(bool on) {
 }
 
 bool readSsrPinHigh() {
-  return digitalRead(Pins::SSR) == SSR_DRIVER_OFF_LEVEL;
+  return digitalRead(Pins::HEATER_CTRL) == SSR_DRIVER_OFF_LEVEL;
 }
 
 float clampFloat(float value, float low, float high) {
