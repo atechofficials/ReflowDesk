@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "slot": 3,
+  "name": "Sn42Bi58 Low-Temp Lead-Free",
+  "preheat": {
+    "tempC": 80,
+    "seconds": 90
+  },
+  "soak": {
+    "tempC": 110,
+    "seconds": 120
+  },
+  "reflow": {
+    "tempC": 155,
+    "seconds": 60
+  },
+  "coolingProfile": "normal"
+}

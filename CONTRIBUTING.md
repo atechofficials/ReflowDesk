@@ -16,11 +16,15 @@ ReflowDesk is a desktop SMD reflow soldering hot plate controller. The current f
 - OLED display user interface.
 - Rotary encoder input.
 - Heater control with time-windowed PID output.
+- Four saved solder paste reflow profiles stored in NVS.
+- JSON-based reflow profile provisioning from LittleFS.
+- On-device editing of profile stage temperatures, stage times, and cooling behavior.
 - Cooling fan PWM control, 12V fan power control, and tachometer feedback.
 - ReflowDesk AT-MK1 motherboard cooling fan PWM control and tachometer feedback.
 - ReflowDesk AT-MK1 dual NTC behavior: ambient NTC for PID compensation and motherboard NTC for ReflowDesk enclosure cooling.
 - Buzzer and status LED alerts.
 - NVS-based settings storage with save-skipping for unchanged settings.
+- Smooth OLED auto-scroll for long focused text and adaptive settings row layout.
 - Hardware selection and pin assignment through `src/config.h`.
 
 The current hardware release includes Gerber packages and schematic PDFs for:
@@ -71,6 +75,8 @@ ReflowDesk/
 |   |   |   `-- ReflowDesk_AT-MK1_v1_SCH.pdf
 |   `-- README.md                              Hardware folder overview and fabrication notes
 |-- include/                                   Shared headers and project support files
+|-- data/                                      LittleFS data files, including JSON reflow profile presets
+|   `-- profiles/                              Four optional profile JSON files imported into NVS when changed
 |-- lib/                                       Project-local libraries if needed
 |-- src/                                       Main firmware source
 |   |-- alerts.cpp                             Buzzer, LED, and user alert behavior
@@ -103,22 +109,34 @@ ReflowDesk/
 
 Use PlatformIO to build the firmware.
 
-Current main environment:
-
-```powershell
-pio run -e development
-```
-
-ReflowDesk AT-MK1 ESP32-S3 environment:
+ReflowDesk AT-MK1 Motherboard (ESP32-S3) environment:
 
 ```powershell
 pio run -e at-mk1
 ```
 
+ESP32 4 MB flash / no PSRAM development environment:
+```powershell
+pio run -e development
+```
+
+ESP32-S3 16 MB flash / 2 MB PSRAM development environment:
+
+```powershell
+pio run -e development2
+```
+
 Upload:
 
 ```powershell
-pio run -e development -t upload
+pio run -e at-mk1 -t upload
+pio run -e at-mk1 -t uploadfs
+```
+
+Build LittleFS image for JSON profile files:
+
+```powershell
+pio run -e at-mk1 -t buildfs
 ```
 
 Serial monitor:
@@ -139,6 +157,7 @@ Only one hardware target should be enabled at a time:
 
 - `REFLOW_AT_MK1`
 - `FIREBEETLE2_ESP32E`
+- `ESP32_S3_PICO`
 
 Pin assignments must stay inside the matching hardware block in `src/config.h`. When changing pins, check the ESP32 restrictions already guarded in the file:
 
@@ -146,7 +165,15 @@ Pin assignments must stay inside the matching hardware block in `src/config.h`. 
 - Avoid GPIO12 for external circuits that can affect boot or flash voltage strapping.
 - Do not use GPIO34 to GPIO39 as outputs.
 
-For ReflowDesk AT-MK1, the firmware uses ESP32-S3 pin assignments, an 8 MB OTA partition layout, a second NTC channel for motherboard temperature, and a second PWM fan channel for motherboard cooling. For FireBeetle2 ESP32-E development hardware, the firmware uses a single ADS1115 NTC channel for ambient temperature/PID compensation.
+For `ReflowDesk AT-MK1`, the firmware uses ESP32-S3 pin assignments, an 8 MB OTA partition layout, a second NTC channel for motherboard temperature, and a second PWM fan channel for motherboard cooling. For `FireBeetle2 ESP32-E` development hardware, the firmware uses a 4 MB OTA partition layout and a single ADS1115 NTC channel for ambient temperature/PID compensation. The `ESP32_S3_PICO` target is for ESP32-S3 development boards and does not use the AT-MK1 second NTC or second PWM fan path.
+
+Partition tables:
+
+| File | Intended Use |
+| --- | --- |
+| `partitions_8mb_ota.csv` | Primary AT-MK1 ESP32-S3-WROOM-1U-N8R8 firmware layout. |
+| `partitions_4mb_ota.csv` | ESP32 4 MB flash / no PSRAM development layout. |
+| `partitions_16mb_ota.csv` | ESP32-S3 16 MB flash / 2 MB PSRAM experimental development layout. |
 
 If a hardware change needs a new pin map, add it as a hardware target instead of scattering pin edits through the firmware.
 
@@ -179,7 +206,10 @@ Do not assume KiCad source files are present in the repository. Hardware documen
 - Use time-windowed heater control for PTC heating elements and SSR output. Do not replace this with high-frequency heater PWM unless the hardware is specifically redesigned for it.
 - Keep settings validation strict. Stored settings should be clamped to safe ranges before use.
 - Preserve NVS flash wear protection by avoiding unnecessary writes when settings have not changed.
-- Keep OLED text short and readable on a 128x64 display.
+- Keep OLED text readable on a 128x64 display. Long focused labels or values may scroll, but stable rows should use available space before relying on scrolling.
+- Keep reflow profile names display-only on device unless a proper text-entry UI is added.
+- When changing profile JSON schema or defaults, update the files in `data/profiles/`, settings validation, migration behavior, and README notes together.
+- Preserve legacy settings migration when changing `SettingsData`; older global curve settings should continue to migrate into Profile-1 when possible.
 - Keep serial debug output useful for hardware validation, especially temperature, heater state, fan power, fan duty, and RPM.
 
 ---
@@ -215,6 +245,16 @@ When adding a user setting:
 
 Settings should be understandable from the device UI without requiring a user to read the firmware.
 
+Reflow profile settings are grouped under profile slots instead of being shown as global stage values. Keep global settings limited to values that are truly device-wide, such as safety limits, buzzer behavior, LED brightness, and PID tuning.
+
+When adding or changing profile fields:
+
+- Update `ReflowProfile` and validation.
+- Update factory defaults and JSON import.
+- Update the profile editor UI.
+- Keep the JSON files under `data/profiles/` in sync with the supported schema.
+- Build both the firmware and LittleFS image when the data files change.
+
 ---
 
 ## Safety Expectations
@@ -241,7 +281,9 @@ If a change reduces safety margin, it should not be merged.
 
 Before submitting a change:
 
-- Build the project with `pio run -e development`.
+- Build the main hardware target with `pio run -e at-mk1`.
+- Build affected development targets, such as `pio run -e development` or `pio run -e development2`, when touching shared firmware or partition files.
+- Build the filesystem image with `pio run -e at-mk1 -t buildfs` when changing files under `data/`.
 - Test relevant hardware behavior if the change touches IO, sensors, heater control, fan control, buzzer, or display behavior.
 - Keep changes focused on one topic.
 - Update `docs/` when the change affects setup, hardware, calibration, fabrication, or operating behavior.

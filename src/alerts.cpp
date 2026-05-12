@@ -73,13 +73,14 @@ void AlertManager::tick(uint32_t now) {
 }
 
 void AlertManager::updateStatusLed(float plateC, const SettingsData &settings, bool fault) {
+  const ReflowProfile &profile = SettingsStore::activeProfile(settings);
   if (fault) {
     setLed(255, 0, 0);
   } else if (plateC <= settings.safeTouchC) {
     setLed(0, 180, 0);
-  } else if (plateC < settings.soakTempC) {
+  } else if (plateC < profile.soakTempC) {
     setLed(220, 170, 0);
-  } else if (plateC < settings.reflowTempC) {
+  } else if (plateC < profile.reflowTempC) {
     setLed(255, 70, 0);
   } else {
     setLed(255, 0, 0);

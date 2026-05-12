@@ -9,20 +9,21 @@
 
 #include <Arduino.h>
 
-#define FW_VERSION "0.3.0"
+#define FW_VERSION "0.4.0"
 
 // Hardware selection
 // PlatformIO environments select the target with build flags. AT-MK1 is the default
 // ReflowDesk PCB target if this file is compiled without build flags.
 // #define REFLOW_AT_MK1
 // #define FIREBEETLE2_ESP32E
+// #define ESP32_S3_PICO
 
-#if !defined(REFLOW_AT_MK1) && !defined(FIREBEETLE2_ESP32E)
+#if !defined(REFLOW_AT_MK1) && !defined(FIREBEETLE2_ESP32E) && !defined(ESP32_S3_PICO)
 #define REFLOW_AT_MK1
 #endif
 
-#if defined(REFLOW_AT_MK1) && defined(FIREBEETLE2_ESP32E)
-#error "Select only one hardware target in config.h or PlatformIO build flags"
+#if (defined(REFLOW_AT_MK1) + defined(FIREBEETLE2_ESP32E) + defined(ESP32_S3_PICO)) != 1
+#error "Select exactly one hardware target in config.h or PlatformIO build flags"
 #endif
 
 #if defined(REFLOW_AT_MK1)
@@ -41,6 +42,11 @@
 #elif defined(FIREBEETLE2_ESP32E)
 #define DEVICE_NAME "ReflowDesk"
 #define DEVICE_MODEL "FireBeetle2"
+#define DEVICE_MANUFACTURER "A-Tech Officials"
+#define DEVICE_HW_VERSION "1.0"
+#elif defined(ESP32_S3_PICO)
+#define DEVICE_NAME "ReflowDesk"
+#define DEVICE_MODEL "ESP32-S3-Pico"
 #define DEVICE_MANUFACTURER "A-Tech Officials"
 #define DEVICE_HW_VERSION "1.0"
 #endif
@@ -105,6 +111,28 @@ constexpr uint32_t FAN_POWER = 4;
 
 constexpr uint32_t STATUS_LED = 5;
 constexpr uint32_t BUZZER = 26;
+#elif defined(ESP32_S3_PICO)
+constexpr uint32_t I2C_SCL = 11;
+constexpr uint32_t I2C_SDA = 12;
+
+constexpr uint32_t SPI_MOSI = 13;
+constexpr uint32_t SPI_SCK = 14;
+constexpr uint32_t SPI_MISO = 15;
+
+constexpr uint32_t MAX6675_CS = 16;
+
+constexpr uint32_t ENCODER_A = 17;
+constexpr uint32_t ENCODER_B = 18;
+constexpr uint32_t ENCODER_BTN = 33;
+
+constexpr uint32_t HEATER_CTRL = 34;
+
+constexpr uint32_t FAN_PWM = 38;
+constexpr uint32_t FAN_TACH = 39;
+constexpr uint32_t FAN_POWER = 40;
+
+constexpr uint32_t STATUS_LED = 21;
+constexpr uint32_t BUZZER = 41;
 #endif
 }
 
@@ -127,7 +155,7 @@ static_assert(!isReservedPin(Pins::I2C_SCL) && !isReservedPin(Pins::I2C_SDA) &&
                   !isReservedPin(Pins::FAN_POWER) && !isReservedPin(Pins::STATUS_LED) &&
                   !isReservedPin(Pins::BUZZER),
               "Selected REFLOW_AT_MK1 pin uses a reserved ESP32-S3 function.");
-#else
+#elif defined(FIREBEETLE2_ESP32E)
 constexpr bool isFlashBusPin(uint32_t pin) {
   return pin >= 6 && pin <= 11;
 }
@@ -163,13 +191,27 @@ static_assert(!isInputOnlyPin(Pins::HEATER_CTRL) && !isInputOnlyPin(Pins::FAN_PW
                   !isInputOnlyPin(Pins::FAN_POWER) && !isInputOnlyPin(Pins::STATUS_LED) &&
                   !isInputOnlyPin(Pins::BUZZER),
               "GPIO34-GPIO39 are input-only and cannot drive outputs.");
+#elif defined(ESP32_S3_PICO)
+constexpr bool isReservedS3Pin(uint32_t pin) {
+  return pin == 0 || pin == 3 || pin == 19 || pin == 20 || (pin >= 26 && pin <= 32) || pin == 45 || pin == 46;
+}
+
+static_assert(!isReservedS3Pin(Pins::I2C_SCL) && !isReservedS3Pin(Pins::I2C_SDA) &&
+                  !isReservedS3Pin(Pins::SPI_MOSI) && !isReservedS3Pin(Pins::SPI_SCK) &&
+                  !isReservedS3Pin(Pins::SPI_MISO) && !isReservedS3Pin(Pins::MAX6675_CS) &&
+                  !isReservedS3Pin(Pins::ENCODER_A) && !isReservedS3Pin(Pins::ENCODER_B) &&
+                  !isReservedS3Pin(Pins::ENCODER_BTN) && !isReservedS3Pin(Pins::HEATER_CTRL) &&
+                  !isReservedS3Pin(Pins::FAN_PWM) && !isReservedS3Pin(Pins::FAN_TACH) &&
+                  !isReservedS3Pin(Pins::FAN_POWER) && !isReservedS3Pin(Pins::STATUS_LED) &&
+                  !isReservedS3Pin(Pins::BUZZER),
+              "Selected ESP32_S3_PICO pin uses a reserved ESP32-S3 function.");
 #endif
 }
 
 namespace Timing {
 constexpr uint16_t TEMP_READ_MS = 500;
 constexpr uint16_t AMBIENT_READ_MS = 1000;
-constexpr uint16_t DISPLAY_MS = 180;
+constexpr uint16_t DISPLAY_MS = 60;
 constexpr uint16_t CONTROL_MS = 500;
 constexpr uint16_t SSR_WINDOW_MS = 2000;
 constexpr uint16_t BUTTON_DEBOUNCE_MS = 40;

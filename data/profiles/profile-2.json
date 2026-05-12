@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "slot": 2,
+  "name": "SAC305 Lead-Free",
+  "preheat": {
+    "tempC": 150,
+    "seconds": 120
+  },
+  "soak": {
+    "tempC": 180,
+    "seconds": 90
+  },
+  "reflow": {
+    "tempC": 235,
+    "seconds": 45
+  },
+  "coolingProfile": "rapid"
+}

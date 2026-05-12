@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "slot": 1,
+  "name": "Sn63Pb37 Leaded",
+  "preheat": {
+    "tempC": 130,
+    "seconds": 90
+  },
+  "soak": {
+    "tempC": 180,
+    "seconds": 90
+  },
+  "reflow": {
+    "tempC": 215,
+    "seconds": 45
+  },
+  "coolingProfile": "normal"
+}

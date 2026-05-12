@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "slot": 4,
+  "name": "Generic Conservative",
+  "preheat": {
+    "tempC": 150,
+    "seconds": 120
+  },
+  "soak": {
+    "tempC": 180,
+    "seconds": 60
+  },
+  "reflow": {
+    "tempC": 200,
+    "seconds": 30
+  },
+  "coolingProfile": "silent"
+}

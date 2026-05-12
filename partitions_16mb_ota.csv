@@ -1,0 +1,21 @@
+# ESP32-S3  16MB Flash (Quad) + 2MB Embedded PSRAM  -  OTA layout
+#
+# Layout summary:
+#   nvs       0x009000 -> 0x00DFFF   (   20 KB)
+#   otadata   0x00E000 -> 0x00FFFF   (    8 KB)
+#   ota_0     0x010000 -> 0x30FFFF   ( 3072 KB)
+#   ota_1     0x310000 -> 0x60FFFF   ( 3072 KB)
+#   littlefs  0x610000 -> 0xFEFFFF   (10112 KB)
+#   coredump  0xFF0000 -> 0xFFFFFF   (   64 KB)
+#
+# Both OTA app slots are identical. PSRAM size does not change the flash
+# partition map; this table leaves extra room for future firmware growth while
+# keeping a large LittleFS area for profile JSON files and future assets.
+
+# Name,     Type,  SubType,  Offset,    Size,      Flags
+nvs,        data,  nvs,      0x9000,    0x5000,
+otadata,    data,  ota,      0xE000,    0x2000,
+app0,       app,   ota_0,    0x10000,   0x300000,
+app1,       app,   ota_1,    0x310000,  0x300000,
+spiffs,     data,  spiffs,   0x610000,  0x9E0000,
+coredump,   data,  coredump, 0xFF0000,  0x10000,

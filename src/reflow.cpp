@@ -178,13 +178,14 @@ uint16_t ReflowController::cooldownRemainingSeconds(uint32_t now) const {
 }
 
 float ReflowController::targetC(const SettingsData &settings) const {
+  const ReflowProfile &profile = SettingsStore::activeProfile(settings);
   switch (_state) {
     case ReflowState::Preheat:
-      return settings.preheatTempC;
+      return profile.preheatTempC;
     case ReflowState::Soak:
-      return settings.soakTempC;
+      return profile.soakTempC;
     case ReflowState::Reflow:
-      return settings.reflowTempC;
+      return profile.reflowTempC;
     case ReflowState::Cooling:
       return settings.safeTouchC;
     default:
@@ -200,13 +201,14 @@ uint32_t ReflowController::holdElapsedSeconds(uint32_t now) const {
 }
 
 uint16_t ReflowController::holdTargetSeconds(const SettingsData &settings) const {
+  const ReflowProfile &profile = SettingsStore::activeProfile(settings);
   switch (_state) {
     case ReflowState::Preheat:
-      return settings.preheatSeconds;
+      return profile.preheatSeconds;
     case ReflowState::Soak:
-      return settings.soakSeconds;
+      return profile.soakSeconds;
     case ReflowState::Reflow:
-      return settings.reflowSeconds;
+      return profile.reflowSeconds;
     default:
       return 0;
   }
@@ -284,8 +286,9 @@ void ReflowController::enterFault(FaultReason reason, uint32_t now) {
 }
 
 void ReflowController::updateCooling(const SettingsData &settings, float plateC) {
+  const ReflowProfile &profile = SettingsStore::activeProfile(settings);
   uint8_t speed = 35;
-  switch (settings.coolingProfile) {
+  switch (profile.coolingProfile) {
     case COOLING_PROFILE_RAPID:
       if (plateC > 70.0f) {
         speed = 100;

@@ -30,28 +30,39 @@ public:
             const FanController *boardFan = nullptr);
 
 private:
-  enum class Screen : uint8_t { Home, Settings, Edit, About, ResetConfirm };
+  enum class Screen : uint8_t { Home, Settings, Edit, ProfileEditor, ProfileEdit, About, ResetConfirm };
 
   void drawHome(const SettingsData &settings, const ReflowController &reflow,
                 const HeaterController &heater, const FanController &fan, const TemperatureSample &sample,
                 const FanController *boardFan);
   void drawSettings(const SettingsStore &settings);
   void drawEdit(const SettingsData &settings);
+  void drawProfileEditor(const SettingsData &settings);
+  void drawProfileEdit(const SettingsData &settings);
   void drawAbout();
   void drawResetConfirm();
   void drawFooter(const __FlashStringHelper *left, const __FlashStringHelper *right);
+  void drawTextWindow(const char *text, int16_t x, int16_t y, uint8_t width, bool focused, uint8_t textSize,
+                      uint8_t scrollId);
   const char *settingLabel(uint8_t index) const;
-  void printSettingValue(const SettingsData &settings, uint8_t index);
+  const char *profileSettingLabel(uint8_t index) const;
+  void settingValueText(const SettingsData &settings, uint8_t index, char *buffer, size_t length) const;
+  void profileSettingValueText(const SettingsData &settings, uint8_t index, char *buffer, size_t length) const;
   void adjustSetting(SettingsData &settings, int8_t delta, uint8_t index);
+  void adjustProfileSetting(SettingsData &settings, int8_t delta, uint8_t index);
   void beginSettingsDraft(const SettingsData &settings);
   void commitSettingsDraft(SettingsStore &settings);
   void keepSelectionVisible();
+  void keepProfileSelectionVisible();
 
   Adafruit_SSD1306 _display;
   Screen _screen = Screen::Home;
   uint8_t _homeSelection = 0;
   uint8_t _settingsSelection = 0;
   uint8_t _settingsTop = 0;
+  uint8_t _profileSelection = 0;
+  uint8_t _profileTop = 0;
+  uint8_t _profileEditIndex = 0;
   SettingsData _draftSettings{};
   bool _draftActive = false;
   uint32_t _lastDrawMs = 0;

@@ -87,18 +87,23 @@ void updateBoardFan(uint32_t now, const TemperatureSample &sample) {
 
 #if REFLOW_DEBUG
 void printSettingsLine(const SettingsData &data) {
+  const ReflowProfile &profile = SettingsStore::activeProfile(data);
   Serial.print(F("CFG ph="));
-  Serial.print(data.preheatTempC);
+  Serial.print(profile.preheatTempC);
   Serial.print(F("/"));
-  Serial.print(data.preheatSeconds);
+  Serial.print(profile.preheatSeconds);
   Serial.print(F(" sk="));
-  Serial.print(data.soakTempC);
+  Serial.print(profile.soakTempC);
   Serial.print(F("/"));
-  Serial.print(data.soakSeconds);
+  Serial.print(profile.soakSeconds);
   Serial.print(F(" rf="));
-  Serial.print(data.reflowTempC);
+  Serial.print(profile.reflowTempC);
   Serial.print(F("/"));
-  Serial.print(data.reflowSeconds);
+  Serial.print(profile.reflowSeconds);
+  Serial.print(F(" profile="));
+  Serial.print(data.selectedProfileIndex + 1);
+  Serial.print(F(":"));
+  Serial.print(profile.name);
   Serial.print(F(" safe="));
   Serial.print(data.safeTouchC);
   Serial.print(F(" cut="));
@@ -106,7 +111,7 @@ void printSettingsLine(const SettingsData &data) {
   Serial.print(F(" buz="));
   Serial.print(data.buzzerEnabled ? F("on") : F("off"));
   Serial.print(F(" cool="));
-  Serial.print(SettingsStore::coolingProfileName(data.coolingProfile));
+  Serial.print(SettingsStore::coolingProfileName(profile.coolingProfile));
   Serial.print(F(" pid="));
   Serial.print(SettingsStore::kp(data), 2);
   Serial.print(F(","));

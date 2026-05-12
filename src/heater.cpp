@@ -12,8 +12,8 @@ constexpr uint8_t SSR_DRIVER_ON_LEVEL = HIGH;
 constexpr uint8_t SSR_DRIVER_OFF_LEVEL = LOW;
 
 void configureSsrOff() {
-  digitalWrite(Pins::HEATER_CTRL, SSR_DRIVER_OFF_LEVEL);
   pinMode(Pins::HEATER_CTRL, OUTPUT);
+  digitalWrite(Pins::HEATER_CTRL, SSR_DRIVER_OFF_LEVEL);
 }
 
 void configureSsrOn() {
