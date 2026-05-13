@@ -10,7 +10,7 @@ ReflowDesk is a small desktop SMD reflow soldering hot plate designed for makers
 
 The project is currently in active development. The first hardware revision, **ReflowDesk AT-MK1**, is available as early hardware manufacturing files for prototype validation.
 
-Current firmware version: **v0.4.0**.
+Current firmware version: **v0.5.4**.
 
 ---
 
@@ -30,6 +30,15 @@ ReflowDesk is intended to sit on a workbench and provide a controlled heating su
 - Reflow process control for preheat, soak, reflow, and cooldown stages.
 - OLED display for live process status.
 - Rotary encoder based user interface.
+- ESP32-S3 hosted ReflowDesk Web Interface for AT-MK1 and ESP32-S3 development targets.
+- WiFiManager based first-boot WiFi onboarding with password-protected setup AP.
+- Local web PIN authentication for protected device controls.
+- Live REST/WebSocket sync between the OLED GUI and Web Interface.
+- Browser-based reflow start, emergency stop, live telemetry, and event notifications.
+- Realtime Chart.js reflow process graph for hot plate, set target, and ambient room temperatures.
+- Browser-based reflow profile editor with profile renaming and editable curve graph.
+- Web OTA firmware upload for PlatformIO app `firmware.bin` images.
+- Web controls for reboot and factory reset with safety lockouts.
 - Four saved solder paste reflow profiles with selectable active profile.
 - Reflow profile presets for preheat, soak, reflow, and cooling behavior.
 - JSON-based reflow profile provisioning through `data/profiles/profile-1.json` to `profile-4.json`.
@@ -59,12 +68,38 @@ ReflowDesk is intended to sit on a workbench and provide a controlled heating su
 | v0.2.1 | Initial public firmware release for ReflowDesk with ESP32 development hardware support, OLED UI, rotary encoder control, heater control, ADS1115/MAX6675 sensing, fan PWM control, tach feedback, and safety handling. |
 | v0.3.0 | Added ReflowDesk AT-MK1 ESP32-S3 hardware support, 8 MB OTA partition layout, hardware-selectable pin configuration, ADS1115 ALERT/RDY pin definition, second PWM cooling fan support, dual NTC support for ambient and motherboard temperature sensing, motherboard cooling fan failsafe behavior, and GUI warning for motherboard fan failure. |
 | v0.4.0 | Added four stored solder paste reflow profiles, JSON profile provisioning from LittleFS, on-device profile editing, version-3 settings migration from legacy global curve settings, smooth auto-scrolling OLED text, adaptive settings/profile editor layout, settings cursor reset on menu entry, ESP32-S3 Pico development target fixes, and 16 MB / 4 MB OTA development partition tables. |
+| v0.5.4 | Added the ESP32-S3 hosted ReflowDesk Web Interface with WiFiManager onboarding, local PIN authentication, REST APIs, WebSocket telemetry/events, live Chart.js reflow graphs, web reflow controls, synchronized settings/profile edits, profile renaming, web OTA firmware upload, device reboot/factory reset controls, route persistence, hardware-originated settings change toasts, safer emergency-stop lockouts, stage-target notifications, and ambient NTC transient filtering. |
+
+---
+
+## Web Interface
+
+Firmware v0.5.4 introduces the ReflowDesk Web Interface for ESP32-S3 targets. On first boot, the device starts a password-protected WiFiManager setup access point so router credentials can be configured. After joining the router, the web console is hosted from LittleFS at the device IP address.
+
+The Web Interface mirrors the same firmware state used by the OLED GUI:
+
+- Start a reflow process from the browser and monitor it on the OLED.
+- Stop an active heating stage from the browser or physical input.
+- Edit global settings from either UI and keep the other UI synchronized.
+- Select, rename, and edit reflow profiles from the browser.
+- View live process telemetry, faults, fan state/RPM, SSR state/duty, stage timing, and safety status.
+- Upload app-only PlatformIO `firmware.bin` images through web OTA when the hot plate is idle and safe.
+
+The web console uses local assets stored under `data/` and does not require internet access after the files are uploaded to LittleFS.
+
+### Web Asset Versions
+
+| Asset | Version |
+| --- | --- |
+| `data/index.html` | v1.1.0 |
+| `data/js/app.js` | v1.1.0 |
+| `data/css/style.css` | v1.0.0 |
 
 ---
 
 ## Firmware Profiles
 
-Firmware v0.4.0 replaces the old global preheat, soak, reflow, and cooling settings with four saved reflow profile slots. Each profile contains:
+Firmware v0.4.0 and newer replaces the old global preheat, soak, reflow, and cooling settings with four saved reflow profile slots. Each profile contains:
 
 - Profile name.
 - Preheat temperature and time.
@@ -72,7 +107,9 @@ Firmware v0.4.0 replaces the old global preheat, soak, reflow, and cooling setti
 - Reflow temperature and time.
 - Cooling profile selection.
 
-The active profile is selected from **Settings > Reflow Profile**. Profile values can be edited from **Settings > Edit Reflow Profile**. Profile names are display-only on the device because the rotary encoder UI is not intended for text entry.
+On the OLED, the active profile is selected from **Settings > Reflow Profile** and profile values can be edited from **Settings > Edit Reflow Profile**. Profile names are display-only on the device because the rotary encoder UI is not intended for text entry.
+
+On the Web Interface, profiles can be selected from the Reflow page and edited from the Profiles page. Web profile editing also supports live profile renaming, and saved names are reflected on the OLED GUI.
 
 ### JSON Profile Provisioning
 
@@ -151,7 +188,7 @@ The `hardware/pinouts/` folder contains pinout diagrams for common ESP32 and ESP
 | `hardware/` | Hardware manufacturing files, schematics, pinouts, PCB images, logos, datasheets, and design-related references |
 | `docs/` | Developer, hardware, and project guides |
 | `src/` | Device firmware workspace |
-| `data/` | LittleFS data files, including JSON reflow profile presets |
+| `data/` | LittleFS data files, including Web Interface assets and JSON reflow profile presets |
 | `include/` | Shared project headers and support files |
 | `lib/` | Project-local libraries if needed |
 | `test/` | Test and validation workspace |
@@ -168,7 +205,7 @@ ReflowDesk is not a finished production release yet. The project is currently fo
 - Testing Hot Plate cooling fan control and RPM feedback.
 - Testing ReflowDesk AT-MK1 motherboard temperature monitoring and motherboard cooling fan behavior.
 - Tuning solder paste reflow profiles against real paste and PCB thermal loads.
-- Refining the user interface and safety behavior.
+- Refining the OLED and Web Interface user experience and safety behavior.
 - Preparing reliable build and validation documentation.
 
 ---
@@ -182,6 +219,13 @@ ReflowDesk is not a finished production release yet. The project is currently fo
 | `development2` | ESP32-S3 16 MB flash / 2 MB PSRAM development board | `partitions_16mb_ota.csv` | Experimental development target. ReflowDesk does not require this much flash. |
 
 The final ReflowDesk AT-MK1 v1 motherboard uses the Espressif ESP32-S3-WROOM-1U-N8R8 module. The 8 MB flash partition table is enough for the current firmware and expected near-term features.
+
+When Web Interface assets or JSON profile files change, upload the LittleFS image as well as the firmware:
+
+```powershell
+pio run -e at-mk1 -t upload
+pio run -e at-mk1 -t uploadfs
+```
 
 ---
 

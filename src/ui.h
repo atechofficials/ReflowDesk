@@ -23,6 +23,10 @@ public:
   explicit UiManager(TwoWire &wire);
 
   bool begin();
+  void showStatus(const __FlashStringHelper *title, const __FlashStringHelper *line1,
+                  const __FlashStringHelper *line2 = nullptr);
+  void showStatus(const char *title, const char *line1, const char *line2 = nullptr);
+  void syncSettingsRevision(const SettingsStore &settings);
   void handleInput(const InputEvent &event, SettingsStore &settings, ReflowController &reflow,
                    AlertManager &alerts, const TemperatureSample &sample);
   void draw(uint32_t now, const SettingsStore &settings, const ReflowController &reflow,
@@ -65,5 +69,6 @@ private:
   uint8_t _profileEditIndex = 0;
   SettingsData _draftSettings{};
   bool _draftActive = false;
+  uint32_t _knownSettingsRevision = 0;
   uint32_t _lastDrawMs = 0;
 };

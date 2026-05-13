@@ -9,7 +9,7 @@
 
 #include <Arduino.h>
 
-#define FW_VERSION "0.4.0"
+#define FW_VERSION "0.5.4"
 
 // Hardware selection
 // PlatformIO environments select the target with build flags. AT-MK1 is the default
@@ -33,6 +33,27 @@
 #define REFLOW_HAS_BOARD_NTC 0
 #define REFLOW_HAS_BOARD_FAN 0
 #endif
+
+#ifndef REFLOW_WEB_ENABLED
+#if defined(REFLOW_AT_MK1) || defined(ESP32_S3_PICO)
+#define REFLOW_WEB_ENABLED 1
+#else
+#define REFLOW_WEB_ENABLED 0
+#endif
+#endif
+
+#if (defined(REFLOW_AT_MK1) || defined(ESP32_S3_PICO)) && defined(REFLOW_WEB_ENABLED)
+#define REFLOW_WEB_SETUP_AP_BASE_SSID "ReflowDesk-AT-MK1"
+#else
+#define REFLOW_WEB_SETUP_AP_BASE_SSID "ReflowDesk-Dev"
+#endif
+
+#ifndef REFLOW_WEB_SETUP_AP_PASSWORD
+#define REFLOW_WEB_SETUP_AP_PASSWORD "ReflowDesk@2037"
+#endif
+
+static_assert(sizeof(REFLOW_WEB_SETUP_AP_PASSWORD) >= 9 && sizeof(REFLOW_WEB_SETUP_AP_PASSWORD) <= 64,
+              "REFLOW_WEB_SETUP_AP_PASSWORD must be 8 to 63 characters for WPA2 setup AP security.");
 
 #if defined(REFLOW_AT_MK1)
 #define DEVICE_NAME "ReflowDesk"
@@ -220,17 +241,19 @@ constexpr uint32_t FORCED_COOLDOWN_MS = 120000;
 }
 
 namespace Limits {
-constexpr int16_t PREHEAT_MIN_C = 80;
+constexpr int16_t PREHEAT_MIN_C = 50;
 constexpr int16_t PREHEAT_MAX_C = 180;
 constexpr int16_t SOAK_MIN_C = 120;
 constexpr int16_t SOAK_MAX_C = 210;
 constexpr int16_t REFLOW_MIN_C = 160;
 constexpr int16_t REFLOW_MAX_C = 245;
+constexpr int16_t PROFILE_STAGE_GAP_C = 10;
+constexpr int16_t PROFILE_PREHEAT_SAFE_TOUCH_OFFSET_C = 15;
 constexpr int16_t SAFE_TOUCH_MIN_C = 35;
 constexpr int16_t SAFE_TOUCH_MAX_C = 50;
 constexpr int16_t SAFETY_MIN_C = 220;
 constexpr int16_t SAFETY_MAX_C = 250;
-constexpr uint16_t STAGE_TIME_MIN_S = 5;
+constexpr uint16_t STAGE_TIME_MIN_S = 20;
 constexpr uint16_t STAGE_TIME_MAX_S = 600;
 }
 

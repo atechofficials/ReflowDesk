@@ -45,6 +45,7 @@ private:
   bool ensureAmbientAdc();
   void configureAmbientAdc();
   void readThermistor(uint8_t channel, float &temperatureC, bool &ok, bool &readOnce, uint16_t &adcRaw);
+  float filterAmbientC(float measuredC);
   float thermistorCelsius(float voltage, bool &ok) const;
 
   MAX6675 _plateThermo;
@@ -52,5 +53,7 @@ private:
   TemperatureSample _sample;
   uint32_t _lastPlateMs = 0;
   uint32_t _lastAmbientMs = 0;
+  float _ambientFilteredC = 25.0f;
+  bool _ambientFilterReady = false;
   bool _ambientAdcReady = false;
 };

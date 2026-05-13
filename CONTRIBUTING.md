@@ -15,6 +15,10 @@ ReflowDesk is a desktop SMD reflow soldering hot plate controller. The current f
 - Optional ADS1115 ALERT/RDY pin assignment for future firmware features.
 - OLED display user interface.
 - Rotary encoder input.
+- ESP32-S3 hosted ReflowDesk Web Interface for AT-MK1 and ESP32-S3 development targets.
+- WiFiManager router onboarding with a password-protected setup AP.
+- Local web PIN authentication, REST APIs, and WebSocket telemetry/events.
+- Web OTA upload for app-only PlatformIO `firmware.bin` images.
 - Heater control with time-windowed PID output.
 - Four saved solder paste reflow profiles stored in NVS.
 - JSON-based reflow profile provisioning from LittleFS.
@@ -25,6 +29,7 @@ ReflowDesk is a desktop SMD reflow soldering hot plate controller. The current f
 - Buzzer and status LED alerts.
 - NVS-based settings storage with save-skipping for unchanged settings.
 - Smooth OLED auto-scroll for long focused text and adaptive settings row layout.
+- OLED/Web Interface synchronization for settings, profile changes, process state, telemetry, and event toasts.
 - Hardware selection and pin assignment through `src/config.h`.
 
 The current hardware release includes Gerber packages and schematic PDFs for:
@@ -75,7 +80,11 @@ ReflowDesk/
 |   |   |   `-- ReflowDesk_AT-MK1_v1_SCH.pdf
 |   `-- README.md                              Hardware folder overview and fabrication notes
 |-- include/                                   Shared headers and project support files
-|-- data/                                      LittleFS data files, including JSON reflow profile presets
+|-- data/                                      LittleFS data files, web assets, and JSON reflow profile presets
+|   |-- css/                                   Web Interface stylesheets
+|   |-- fonts/                                 Locally served Web Interface fonts
+|   |-- images/                                Web Interface logos and icons
+|   |-- js/                                    Web Interface JavaScript and vendor libraries
 |   `-- profiles/                              Four optional profile JSON files imported into NVS when changed
 |-- lib/                                       Project-local libraries if needed
 |-- src/                                       Main firmware source
@@ -126,17 +135,17 @@ ESP32-S3 16 MB flash / 2 MB PSRAM development environment:
 pio run -e development2
 ```
 
-Upload:
+Build LittleFS image for Web Interface assets and JSON profile files:
+
+```powershell
+pio run -e at-mk1 -t buildfs
+```
+
+Upload firmware and LittleFS assets:
 
 ```powershell
 pio run -e at-mk1 -t upload
 pio run -e at-mk1 -t uploadfs
-```
-
-Build LittleFS image for JSON profile files:
-
-```powershell
-pio run -e at-mk1 -t buildfs
 ```
 
 Serial monitor:
@@ -211,6 +220,22 @@ Do not assume KiCad source files are present in the repository. Hardware documen
 - When changing profile JSON schema or defaults, update the files in `data/profiles/`, settings validation, migration behavior, and README notes together.
 - Preserve legacy settings migration when changing `SettingsData`; older global curve settings should continue to migrate into Profile-1 when possible.
 - Keep serial debug output useful for hardware validation, especially temperature, heater state, fan power, fan duty, and RPM.
+
+---
+
+## Web Interface Guidelines
+
+The Web Interface is served locally from LittleFS and shares the same live firmware state as the OLED UI. When changing web or web-facing firmware behavior:
+
+- Keep browser controls and OLED controls synchronized through the same settings, profile, and reflow controller paths.
+- Do not add web-only settings that bypass validation or NVS save-skipping behavior.
+- Keep unsafe operations locked out while the plate is active, cooling, cooldown-locked, or above safe-touch temperature. Abort/emergency stop should only be available during active heating stages.
+- Keep OTA limited to app-only PlatformIO `firmware.bin` images. Merged factory images are for external flashing tools, not browser OTA.
+- Keep WiFi setup AP credentials configurable through `src/config.h` and the Web Interface settings page.
+- Preserve local PIN authentication for protected API and WebSocket access.
+- Keep all web assets local under `data/`; do not introduce CDN dependencies for runtime UI behavior.
+- Update the asset version comments in `data/index.html`, `data/js/app.js`, and `data/css/style.css` when those files receive meaningful UI or behavior changes.
+- Build and upload the LittleFS image when files under `data/` change.
 
 ---
 

@@ -1,0 +1,335 @@
+<!-- ReflowDesk Web Interface -->
+<!-- Version: 1.1.0 -->
+<!-- Github: https://github.com/atechofficials/ReflowDesk -->
+<!-- Author: Mrinal @atechofficials -->
+<!-- License: General Public License v3.0 -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ReflowDesk</title>
+  <link rel="icon" type="image/png" href="/images/logos/ReflowDesk_favicon.png">
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="/js/vendor/chart.umd.js"></script>
+  <script src="/js/app.js" defer></script>
+</head>
+<body>
+  <div class="auth-screen" id="auth-screen">
+    <div class="auth-card">
+      <div class="brand-block">
+        <img src="/images/logos/ReflowDesk_logo_1.png" alt="ReflowDesk" class="brand-logo">
+        <div>
+          <div class="brand-title">ReflowDesk</div>
+          <div class="brand-subtitle"><span data-device-model-label>Device</span> Web Console</div>
+        </div>
+      </div>
+      <h1 id="auth-title">Unlock Device</h1>
+      <p id="auth-copy">Enter the local web PIN for this ReflowDesk.</p>
+      <form id="auth-form">
+        <label for="pin-input">Web PIN</label>
+        <input id="pin-input" type="password" inputmode="numeric" minlength="4" maxlength="32" autocomplete="current-password">
+        <button type="submit" class="primary-btn" id="auth-submit">Sign In</button>
+      </form>
+      <div class="inline-note" id="auth-note"></div>
+    </div>
+  </div>
+
+  <div class="app-shell locked" id="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <img src="/images/logos/ReflowDesk_logo_1.png" alt="ReflowDesk">
+        <div>
+          <strong>ReflowDesk</strong>
+          <span data-device-model-label>Device</span>
+        </div>
+      </div>
+      <nav class="nav">
+        <button class="nav-btn active" data-page="dashboard"><span class="mask icon-home"></span>Reflow</button>
+        <button class="nav-btn" data-page="profiles"><span class="mask icon-chart"></span>Profiles</button>
+        <button class="nav-btn" data-page="settings"><span class="mask icon-sliders"></span>Settings</button>
+        <button class="nav-btn" data-page="device"><span class="mask icon-info"></span>Device</button>
+        <button class="nav-btn" data-page="logs"><span class="mask icon-alert"></span>Logs</button>
+      </nav>
+      <div class="sidebar-footer">
+        <span id="side-fw">FW -</span>
+        <button id="logout-btn" class="ghost-btn">Logout</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="menu-btn" id="menu-btn" aria-label="Menu">Menu</button>
+        <div class="top-title">
+          <strong id="page-title">Reflow Process</strong>
+          <span id="device-line">Connecting</span>
+        </div>
+        <div class="status-pills">
+          <span class="pill" id="ws-pill">WS: --</span>
+          <span class="pill" id="ip-pill">IP: --</span>
+          <span class="pill hot" id="state-pill">Idle</span>
+        </div>
+        <div class="top-actions">
+          <button class="danger-btn compact" id="abort-btn">Emergency Stop</button>
+          <button class="warn-btn compact" id="reboot-btn">Reboot</button>
+          <button class="danger-btn compact" id="factory-btn">Factory Reset</button>
+        </div>
+      </header>
+
+      <section class="page active" id="page-dashboard">
+        <div class="dashboard-grid">
+          <section class="panel run-panel">
+            <div class="panel-head">
+              <div>
+                <h2>Run Setup</h2>
+                <p id="profile-active">Profile -</p>
+              </div>
+              <div class="process-actions">
+                <button class="primary-btn" id="start-btn">Start</button>
+              </div>
+            </div>
+            <div class="form-grid one-col">
+              <label>Reflow Profile<select id="active-profile"></select></label>
+            </div>
+          </section>
+
+          <section class="panel process-panel">
+            <div class="panel-head">
+              <div>
+                <h2>Live Reflow Curve</h2>
+                <p>Realtime plate, target, and ambient temperature.</p>
+              </div>
+            </div>
+            <div class="chart-key" aria-label="Live graph key">
+              <span><i style="--swatch:#37d6d0"></i>Plate C</span>
+              <span><i style="--swatch:#ffbd4a"></i>Target C</span>
+              <span><i style="--swatch:#6aa4ff"></i>Ambient C</span>
+            </div>
+            <div class="chart-box">
+              <canvas id="live-chart"></canvas>
+            </div>
+          </section>
+
+          <section class="panel stat-grid">
+            <div class="metric">
+              <span>Plate</span>
+              <strong id="plate-temp">--.-C</strong>
+            </div>
+            <div class="metric">
+              <span>Target</span>
+              <strong id="target-temp">--C</strong>
+            </div>
+            <div class="metric">
+              <span>Ambient</span>
+              <strong id="ambient-temp">--.-C</strong>
+            </div>
+            <div class="metric">
+              <span>Stage</span>
+              <strong id="stage-name">Idle</strong>
+            </div>
+            <div class="metric">
+              <span>Hold Left</span>
+              <strong id="time-left">--s</strong>
+            </div>
+            <div class="metric">
+              <span>Fault</span>
+              <strong id="fault-name">None</strong>
+            </div>
+          </section>
+
+          <section class="panel control-grid">
+            <div class="control-tile">
+              <span class="mask icon-temp"></span>
+              <div>
+                <span>SSR</span>
+                <strong id="ssr-state">OFF</strong>
+                <small id="ssr-duty">0%</small>
+              </div>
+            </div>
+            <div class="control-tile">
+              <span class="mask icon-fan"></span>
+              <div>
+                <span>Cooling Fan</span>
+                <strong id="fan-state">OFF</strong>
+                <small id="fan-rpm">0 RPM</small>
+              </div>
+            </div>
+            <div class="control-tile">
+              <span class="mask icon-fan"></span>
+              <div>
+                <span>Board Fan</span>
+                <strong id="board-fan-state">N/A</strong>
+                <small id="board-fan-rpm">--</small>
+              </div>
+            </div>
+            <div class="control-tile">
+              <span class="mask icon-alert"></span>
+              <div>
+                <span>Safety</span>
+                <strong id="safety-state">Ready</strong>
+                <small id="cooldown-left">--</small>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="page" id="page-profiles">
+        <div class="split-layout">
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>Reflow Profiles</h2>
+                <p>Edit stage presets and rename profiles.</p>
+              </div>
+              <button class="primary-btn" id="save-profile-btn">Save Profile</button>
+            </div>
+            <div class="profile-tabs" id="profile-tabs"></div>
+            <form class="form-grid" id="profile-form">
+              <label>Profile Name<input id="profile-name" maxlength="63"></label>
+              <label>Cooling Profile<select id="profile-cooling"><option value="rapid">Rapid</option><option value="normal">Normal</option><option value="silent">Silent</option></select></label>
+              <label>Preheat Temp C<input id="preheat-temp" type="number"></label>
+              <label>Preheat Time s<input id="preheat-time" type="number"></label>
+              <label>Soak Temp C<input id="soak-temp" type="number"></label>
+              <label>Soak Time s<input id="soak-time" type="number"></label>
+              <label>Reflow Temp C<input id="reflow-temp" type="number"></label>
+              <label>Reflow Time s<input id="reflow-time" type="number"></label>
+            </form>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>Profile Curve</h2>
+                <p id="profile-curve-name">Profile -</p>
+              </div>
+            </div>
+            <div class="chart-key" aria-label="Profile graph key">
+              <span><i style="--swatch:#8ea2b7"></i>Start</span>
+              <span><i style="--swatch:#ffbd4a"></i>Preheat</span>
+              <span><i style="--swatch:#f97316"></i>Soak</span>
+              <span><i style="--swatch:#ff5c7a"></i>Reflow</span>
+              <span><i style="--swatch:#6aa4ff"></i>Cool</span>
+            </div>
+            <div class="chart-box small">
+              <canvas id="profile-chart"></canvas>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="page" id="page-settings">
+        <section class="panel settings-save-panel">
+          <div class="panel-head">
+            <div>
+              <h2>Device Settings</h2>
+              <p>These values are shared with the OLED settings page.</p>
+            </div>
+            <button class="primary-btn" id="save-settings-btn">Save Settings</button>
+          </div>
+        </section>
+        <form class="settings-grid" id="settings-form">
+          <section class="panel">
+            <div class="panel-head compact-head">
+              <h2>Safety</h2>
+            </div>
+            <div class="form-grid">
+              <label>Safe Touch C<input id="safe-touch" type="number"></label>
+              <label>Safety Cutoff C<input id="safety-cutoff" type="number"></label>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-head compact-head">
+              <h2>Feedback</h2>
+            </div>
+            <div class="form-grid">
+              <label>LED Brightness<input id="led-brightness" type="number"></label>
+              <label>Buzzer<select id="buzzer-enabled"><option value="true">On</option><option value="false">Off</option></select></label>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-head compact-head">
+              <h2>PID Loop</h2>
+            </div>
+            <div class="form-grid">
+              <label>Kp<input id="pid-kp" type="number" step="0.01"></label>
+              <label>Ki<input id="pid-ki" type="number" step="0.01"></label>
+              <label>Kd<input id="pid-kd" type="number" step="0.01"></label>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-head compact-head">
+              <h2>WiFi Setup AP</h2>
+            </div>
+            <div class="form-grid">
+              <label>Setup AP SSID<input id="setup-ap-ssid" readonly></label>
+              <label>Setup AP Password<input id="setup-ap-password" type="password" minlength="8" maxlength="63"></label>
+            </div>
+          </section>
+          </form>
+      </section>
+
+      <section class="page" id="page-device">
+        <div class="split-layout">
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>Firmware OTA</h2>
+                <p>Upload the PlatformIO app firmware.bin image.</p>
+              </div>
+            </div>
+            <form id="ota-form" class="ota-form">
+              <input id="ota-file" type="file" accept=".bin">
+              <button class="primary-btn" type="submit">Upload Firmware</button>
+            </form>
+            <div class="progress"><div id="ota-progress"></div></div>
+            <div class="inline-note" id="ota-note">OTA is locked while the plate is active or hot.</div>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>Device Info</h2>
+                <p id="device-summary">-</p>
+              </div>
+            </div>
+            <div class="info-list" id="device-info"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="page" id="page-logs">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Events</h2>
+              <p>Live web and reflow process notifications.</p>
+            </div>
+            <button class="ghost-btn" id="clear-log-btn">Clear</button>
+          </div>
+          <div class="event-list" id="event-list"></div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-backdrop hidden" id="confirm-modal">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="brand-block modal-brand">
+        <img src="/images/logos/ReflowDesk_logo_1.png" alt="ReflowDesk" class="brand-logo">
+        <div>
+          <div class="brand-title">ReflowDesk</div>
+          <div class="brand-subtitle"><span data-device-model-label>Device</span> Web Console</div>
+        </div>
+      </div>
+      <h2 id="modal-title">Confirm Action</h2>
+      <p id="modal-message"></p>
+      <div class="modal-actions">
+        <button class="ghost-btn" id="modal-cancel">Cancel</button>
+        <button class="danger-btn" id="modal-confirm">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toast-stack"></div>
+</body>
+</html>

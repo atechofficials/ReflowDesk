@@ -16,6 +16,7 @@
 #include "sensors.h"
 #include "settings.h"
 #include "ui.h"
+#include "web_server.h"
 
 TwoWire AppWire(0);
 
@@ -32,6 +33,7 @@ AlertManager alerts;
 InputManager input;
 ReflowController reflow(heater, fan, alerts);
 UiManager ui(AppWire);
+ReflowWebServer webServer;
 
 #if REFLOW_HAS_BOARD_FAN
 uint8_t boardFanDutyFor(float boardC) {
@@ -269,6 +271,14 @@ void setup() {
   reflow.begin();
   ui.begin();
 
+#if REFLOW_WEB_ENABLED
+#if REFLOW_HAS_BOARD_FAN
+  webServer.begin(settings, sensors, reflow, heater, fan, alerts, ui, &boardFan);
+#else
+  webServer.begin(settings, sensors, reflow, heater, fan, alerts, ui);
+#endif
+#endif
+
   alerts.beepPattern(2, 70, 80);
 
 #if REFLOW_DEBUG
@@ -290,6 +300,7 @@ void loop() {
 
   InputEvent event = input.poll(now);
   ui.handleInput(event, settings, reflow, alerts, sample);
+  ui.syncSettingsRevision(settings);
 
   reflow.update(now, settings.data(), sample);
 #if REFLOW_HAS_BOARD_FAN
@@ -308,6 +319,9 @@ void loop() {
   ui.draw(now, settings, reflow, heater, fan, sample, &boardFan);
 #else
   ui.draw(now, settings, reflow, heater, fan, sample);
+#endif
+#if REFLOW_WEB_ENABLED
+  webServer.loop(now);
 #endif
   if (!reflow.isHeatingState()) {
     heater.forceOff();

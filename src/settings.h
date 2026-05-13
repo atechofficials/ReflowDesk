@@ -65,6 +65,8 @@ public:
   void validate();
   bool save();
   bool importProfilesFromLittleFs();
+  uint32_t revision() const { return _revision; }
+  uint32_t resetCount() const { return _resetCount; }
   bool isStorageReady() const { return _storageReady; }
   bool isEepromReady() const { return isStorageReady(); }
   uint8_t eepromAddress() const { return 0; }
@@ -87,10 +89,12 @@ private:
   static uint16_t expectedCrc(SettingsData data);
   static uint32_t fnv1a32(const uint8_t *data, size_t length);
   static void copyProfileName(ReflowProfile &profile, const char *name);
-  static void validateProfile(ReflowProfile &profile, uint8_t index);
+  static void validateProfile(ReflowProfile &profile, uint8_t index, int16_t preheatMinC = Limits::PREHEAT_MIN_C);
   static uint8_t coolingProfileFromName(const char *name, uint8_t fallback);
 
   Preferences _prefs;
   SettingsData _data;
+  uint32_t _revision = 1;
+  uint32_t _resetCount = 0;
   bool _storageReady = false;
 };

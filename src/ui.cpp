@@ -78,6 +78,57 @@ bool UiManager::begin() {
   return true;
 }
 
+void UiManager::showStatus(const __FlashStringHelper *title, const __FlashStringHelper *line1,
+                           const __FlashStringHelper *line2) {
+  _display.clearDisplay();
+  _display.setTextColor(SSD1306_WHITE);
+  _display.setTextSize(1);
+  _display.setCursor(0, 0);
+  _display.println(title);
+  _display.println();
+  if (line1 != nullptr) {
+    _display.println(line1);
+  }
+  if (line2 != nullptr) {
+    _display.println(line2);
+  }
+  _display.display();
+}
+
+void UiManager::showStatus(const char *title, const char *line1, const char *line2) {
+  _display.clearDisplay();
+  _display.setTextColor(SSD1306_WHITE);
+  _display.setTextSize(1);
+  _display.setCursor(0, 0);
+  if (title != nullptr) {
+    _display.println(title);
+  }
+  _display.println();
+  if (line1 != nullptr) {
+    _display.println(line1);
+  }
+  if (line2 != nullptr) {
+    _display.println(line2);
+  }
+  _display.display();
+}
+
+void UiManager::syncSettingsRevision(const SettingsStore &settings) {
+  uint32_t revision = settings.revision();
+  if (_knownSettingsRevision == 0) {
+    _knownSettingsRevision = revision;
+    return;
+  }
+  if (_knownSettingsRevision == revision) {
+    return;
+  }
+
+  _knownSettingsRevision = revision;
+  if (_draftActive) {
+    beginSettingsDraft(settings.data());
+  }
+}
+
 void UiManager::handleInput(const InputEvent &event, SettingsStore &settings, ReflowController &reflow,
                             AlertManager &alerts, const TemperatureSample &sample) {
   if (event.rotation == 0 && !event.click) {
@@ -699,23 +750,33 @@ void UiManager::adjustProfileSetting(SettingsData &settings, int8_t delta, uint8
   }
 
   ReflowProfile &profile = settings.profiles[_profileEditIndex];
+  const int16_t preheatMinC = clampLocal<int16_t>(
+      settings.safeTouchC + Limits::PROFILE_PREHEAT_SAFE_TOUCH_OFFSET_C, Limits::PREHEAT_MIN_C, Limits::PREHEAT_MAX_C);
   switch (index) {
     case P_IDX_PREHEAT_TEMP:
-      profile.preheatTempC = clampLocal<int16_t>(profile.preheatTempC + delta, Limits::PREHEAT_MIN_C, Limits::PREHEAT_MAX_C);
+      profile.preheatTempC = clampLocal<int16_t>(profile.preheatTempC + delta, preheatMinC, Limits::PREHEAT_MAX_C);
+      profile.soakTempC = clampLocal<int16_t>(profile.soakTempC, profile.preheatTempC + Limits::PROFILE_STAGE_GAP_C,
+                                              Limits::SOAK_MAX_C);
+      profile.reflowTempC = clampLocal<int16_t>(profile.reflowTempC, profile.soakTempC + Limits::PROFILE_STAGE_GAP_C,
+                                                Limits::REFLOW_MAX_C);
       break;
     case P_IDX_PREHEAT_TIME:
       profile.preheatSeconds = static_cast<uint16_t>(clampLocal<int>(static_cast<int>(profile.preheatSeconds) + delta * 5,
                                                                      Limits::STAGE_TIME_MIN_S, Limits::STAGE_TIME_MAX_S));
       break;
     case P_IDX_SOAK_TEMP:
-      profile.soakTempC = clampLocal<int16_t>(profile.soakTempC + delta, Limits::SOAK_MIN_C, Limits::SOAK_MAX_C);
+      profile.soakTempC = clampLocal<int16_t>(profile.soakTempC + delta, profile.preheatTempC + Limits::PROFILE_STAGE_GAP_C,
+                                              Limits::SOAK_MAX_C);
+      profile.reflowTempC = clampLocal<int16_t>(profile.reflowTempC, profile.soakTempC + Limits::PROFILE_STAGE_GAP_C,
+                                                Limits::REFLOW_MAX_C);
       break;
     case P_IDX_SOAK_TIME:
       profile.soakSeconds = static_cast<uint16_t>(clampLocal<int>(static_cast<int>(profile.soakSeconds) + delta * 5,
                                                                   Limits::STAGE_TIME_MIN_S, Limits::STAGE_TIME_MAX_S));
       break;
     case P_IDX_REFLOW_TEMP:
-      profile.reflowTempC = clampLocal<int16_t>(profile.reflowTempC + delta, Limits::REFLOW_MIN_C, Limits::REFLOW_MAX_C);
+      profile.reflowTempC = clampLocal<int16_t>(profile.reflowTempC + delta, profile.soakTempC + Limits::PROFILE_STAGE_GAP_C,
+                                                Limits::REFLOW_MAX_C);
       break;
     case P_IDX_REFLOW_TIME:
       profile.reflowSeconds = static_cast<uint16_t>(clampLocal<int>(static_cast<int>(profile.reflowSeconds) + delta * 5,
@@ -746,6 +807,7 @@ void UiManager::commitSettingsDraft(SettingsStore &settings) {
   }
   settings.editable() = _draftSettings;
   settings.save();
+  _knownSettingsRevision = settings.revision();
   beginSettingsDraft(settings.data());
 }
 

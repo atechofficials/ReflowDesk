@@ -13,6 +13,8 @@ namespace {
 constexpr uint8_t PLATE_STATUS_OK = 0x00;
 constexpr uint8_t PLATE_STATUS_OPEN = 0x04;
 constexpr uint8_t PLATE_STATUS_NO_COMM = 0x81;
+constexpr float AMBIENT_MAX_RISE_PER_READ_C = 1.0f;
+constexpr float AMBIENT_MAX_FALL_PER_READ_C = 2.0f;
 }
 
 SensorManager::SensorManager(TwoWire &wire)
@@ -82,8 +84,17 @@ void SensorManager::readPlate() {
 }
 
 void SensorManager::readAmbient() {
-  readThermistor(ADS1115_AMBIENT_NTC_CHANNEL, _sample.ambientC, _sample.ambientOk, _sample.ambientReadOnce,
-                 _sample.ambientAdc);
+  float measuredC = _sample.ambientC;
+  bool ok = false;
+  bool readOnce = _sample.ambientReadOnce;
+  uint16_t adcRaw = _sample.ambientAdc;
+  readThermistor(ADS1115_AMBIENT_NTC_CHANNEL, measuredC, ok, readOnce, adcRaw);
+  _sample.ambientReadOnce = readOnce;
+  _sample.ambientOk = ok;
+  _sample.ambientAdc = adcRaw;
+  if (ok) {
+    _sample.ambientC = filterAmbientC(measuredC);
+  }
 }
 
 void SensorManager::readBoard() {
@@ -131,6 +142,23 @@ void SensorManager::readThermistor(uint8_t channel, float &temperatureC, bool &o
   if (readingOk) {
     temperatureC = c;
   }
+}
+
+float SensorManager::filterAmbientC(float measuredC) {
+  if (!_ambientFilterReady) {
+    _ambientFilteredC = measuredC;
+    _ambientFilterReady = true;
+    return _ambientFilteredC;
+  }
+
+  float delta = measuredC - _ambientFilteredC;
+  if (delta > AMBIENT_MAX_RISE_PER_READ_C) {
+    delta = AMBIENT_MAX_RISE_PER_READ_C;
+  } else if (delta < -AMBIENT_MAX_FALL_PER_READ_C) {
+    delta = -AMBIENT_MAX_FALL_PER_READ_C;
+  }
+  _ambientFilteredC += delta;
+  return _ambientFilteredC;
 }
 
 float SensorManager::thermistorCelsius(float voltage, bool &ok) const {

@@ -74,6 +74,10 @@ void ReflowController::update(uint32_t now, const SettingsData &settings, const 
     }
     if (cooldownComplete(settings, sample, now)) {
       _fan.stop();
+      if (_state == ReflowState::Aborted) {
+        _state = ReflowState::Idle;
+        _faultReason = FaultReason::None;
+      }
     } else {
       _fan.full();
     }
@@ -157,7 +161,7 @@ bool ReflowController::canStart(const SettingsData &settings, const TemperatureS
 }
 
 bool ReflowController::canAcknowledge(const SettingsData &settings, const TemperatureSample &sample, uint32_t now) const {
-  return (_state == ReflowState::Fault || _state == ReflowState::Aborted) && cooldownComplete(settings, sample, now);
+  return _state == ReflowState::Fault && cooldownComplete(settings, sample, now);
 }
 
 bool ReflowController::cooldownLocked(const SettingsData &settings, const TemperatureSample &sample, uint32_t now) const {

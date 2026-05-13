@@ -171,6 +171,7 @@ SettingsData SettingsStore::defaults() {
 void SettingsStore::resetDefaults() {
   _data = defaults();
   importProfilesFromLittleFs();
+  ++_resetCount;
 }
 
 void SettingsStore::validate() {
@@ -180,16 +181,18 @@ void SettingsStore::validate() {
   if (_data.selectedProfileIndex >= REFLOW_PROFILE_COUNT) {
     _data.selectedProfileIndex = 0;
   }
-  int16_t highestReflowC = Limits::REFLOW_MIN_C;
+  _data.safeTouchC = clampValue<int16_t>(_data.safeTouchC, Limits::SAFE_TOUCH_MIN_C, Limits::SAFE_TOUCH_MAX_C);
+  _data.safeTouchC = static_cast<int16_t>(((_data.safeTouchC + 2) / 5) * 5);
+  _data.safeTouchC = clampValue<int16_t>(_data.safeTouchC, Limits::SAFE_TOUCH_MIN_C, Limits::SAFE_TOUCH_MAX_C);
+  const int16_t preheatMinC = clampValue<int16_t>(
+      _data.safeTouchC + Limits::PROFILE_PREHEAT_SAFE_TOUCH_OFFSET_C, Limits::PREHEAT_MIN_C, Limits::PREHEAT_MAX_C);
+  int16_t highestReflowC = 0;
   for (uint8_t i = 0; i < REFLOW_PROFILE_COUNT; ++i) {
-    validateProfile(_data.profiles[i], i);
+    validateProfile(_data.profiles[i], i, preheatMinC);
     if (_data.profiles[i].reflowTempC > highestReflowC) {
       highestReflowC = _data.profiles[i].reflowTempC;
     }
   }
-  _data.safeTouchC = clampValue<int16_t>(_data.safeTouchC, Limits::SAFE_TOUCH_MIN_C, Limits::SAFE_TOUCH_MAX_C);
-  _data.safeTouchC = static_cast<int16_t>(((_data.safeTouchC + 2) / 5) * 5);
-  _data.safeTouchC = clampValue<int16_t>(_data.safeTouchC, Limits::SAFE_TOUCH_MIN_C, Limits::SAFE_TOUCH_MAX_C);
   _data.safetyCutoffC = clampValue<int16_t>(_data.safetyCutoffC, Limits::SAFETY_MIN_C, Limits::SAFETY_MAX_C);
   if (_data.safetyCutoffC <= highestReflowC) {
     _data.safetyCutoffC = clampValue<int16_t>(highestReflowC + 10, Limits::SAFETY_MIN_C, Limits::SAFETY_MAX_C);
@@ -353,6 +356,9 @@ bool SettingsStore::save() {
   Serial.print(F(" crc=0x"));
   Serial.println(_data.crc, HEX);
 #endif
+  if (verified) {
+    ++_revision;
+  }
   return verified;
 }
 
@@ -381,16 +387,21 @@ uint32_t SettingsStore::fnv1a32(const uint8_t *data, size_t length) {
   return hash;
 }
 
-void SettingsStore::validateProfile(ReflowProfile &profile, uint8_t index) {
+void SettingsStore::validateProfile(ReflowProfile &profile, uint8_t index, int16_t preheatMinC) {
   if (profile.name[0] == '\0') {
     char fallback[16];
     snprintf(fallback, sizeof(fallback), "Profile-%u", static_cast<unsigned>(index + 1));
     copyProfileName(profile, fallback);
   }
   profile.name[sizeof(profile.name) - 1] = '\0';
-  profile.preheatTempC = clampValue<int16_t>(profile.preheatTempC, Limits::PREHEAT_MIN_C, Limits::PREHEAT_MAX_C);
-  profile.soakTempC = clampValue<int16_t>(profile.soakTempC, Limits::SOAK_MIN_C, Limits::SOAK_MAX_C);
-  profile.reflowTempC = clampValue<int16_t>(profile.reflowTempC, Limits::REFLOW_MIN_C, Limits::REFLOW_MAX_C);
+  preheatMinC = clampValue<int16_t>(preheatMinC, Limits::PREHEAT_MIN_C, Limits::PREHEAT_MAX_C);
+  profile.preheatTempC = clampValue<int16_t>(profile.preheatTempC, preheatMinC, Limits::PREHEAT_MAX_C);
+  const int16_t soakMinC = clampValue<int16_t>(
+      profile.preheatTempC + Limits::PROFILE_STAGE_GAP_C, Limits::PREHEAT_MIN_C, Limits::SOAK_MAX_C);
+  profile.soakTempC = clampValue<int16_t>(profile.soakTempC, soakMinC, Limits::SOAK_MAX_C);
+  const int16_t reflowMinC = clampValue<int16_t>(
+      profile.soakTempC + Limits::PROFILE_STAGE_GAP_C, Limits::PREHEAT_MIN_C, Limits::REFLOW_MAX_C);
+  profile.reflowTempC = clampValue<int16_t>(profile.reflowTempC, reflowMinC, Limits::REFLOW_MAX_C);
   profile.preheatSeconds = clampValue<uint16_t>(profile.preheatSeconds, Limits::STAGE_TIME_MIN_S, Limits::STAGE_TIME_MAX_S);
   profile.soakSeconds = clampValue<uint16_t>(profile.soakSeconds, Limits::STAGE_TIME_MIN_S, Limits::STAGE_TIME_MAX_S);
   profile.reflowSeconds = clampValue<uint16_t>(profile.reflowSeconds, Limits::STAGE_TIME_MIN_S, Limits::STAGE_TIME_MAX_S);
@@ -502,7 +513,9 @@ bool SettingsStore::importProfileFromLittleFs(uint8_t index) {
     profile.coolingProfile = doc["coolingProfile"] | profile.coolingProfile;
   }
   profile.jsonCrc = jsonCrc;
-  validateProfile(profile, index);
+  const int16_t preheatMinC = clampValue<int16_t>(
+      _data.safeTouchC + Limits::PROFILE_PREHEAT_SAFE_TOUCH_OFFSET_C, Limits::PREHEAT_MIN_C, Limits::PREHEAT_MAX_C);
+  validateProfile(profile, index, preheatMinC);
   _data.profiles[index] = profile;
 #if REFLOW_DEBUG
   Serial.print(F("Profile JSON imported: "));
