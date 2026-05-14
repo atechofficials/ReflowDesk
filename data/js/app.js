@@ -1,5 +1,5 @@
 // JavaScript for ReflowDesk Web Interface
-// Version: 1.1.0
+// Version: 1.2.5
 // Github: https://github.com/atechofficials/ReflowDesk
 // Author: Mrinal @atechofficials
 // License: General Public License v3.0
@@ -8,6 +8,7 @@
 
 const $ = id => document.getElementById(id);
 const tokenKey = "reflowdeskToken";
+const themeKey = "reflowdeskTheme";
 const validPages = new Set(["dashboard", "profiles", "settings", "device", "logs"]);
 
 const state = {
@@ -28,7 +29,8 @@ const state = {
   dragProfilePoint: -1,
   modalResolve: null,
   modalOpen: false,
-  faultAckPromptKey: ""
+  faultAckPromptKey: "",
+  theme: localStorage.getItem(themeKey) || "dark"
 };
 
 const els = {
@@ -70,12 +72,17 @@ const els = {
   toastStack: $("toast-stack"),
   otaProgress: $("ota-progress"),
   otaNote: $("ota-note"),
+  otaCurrentVersion: $("ota-current-version"),
+  otaFreeSpace: $("ota-free-space"),
   sidebar: $("sidebar"),
   modal: $("confirm-modal"),
   modalTitle: $("modal-title"),
   modalMessage: $("modal-message"),
   modalCancel: $("modal-cancel"),
-  modalConfirm: $("modal-confirm")
+  modalConfirm: $("modal-confirm"),
+  themeToggle: $("theme-toggle"),
+  themeLabel: $("theme-label"),
+  themeIcon: $("theme-icon")
 };
 
 const limits = {
@@ -103,9 +110,52 @@ function roundStep(value, step) {
   return Math.round(value / step) * step;
 }
 
+function quantize(value, low, high, step) {
+  const parsed = numberOr(value, low);
+  return clamp(roundStep(parsed - low, step) + low, low, high);
+}
+
 function numberOr(value, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function setRangeVisual(input) {
+  if (!input) return;
+  const low = Number(input.min || 0);
+  const high = Number(input.max || 100);
+  const value = clamp(Number(input.value || low), low, high);
+  const progress = high > low ? ((value - low) / (high - low)) * 100 : 0;
+  input.style.setProperty("--range-progress", `${progress}%`);
+}
+
+function syncRangePair(sliderId, valueId, value, low, high, step) {
+  const next = quantize(value, low, high, step);
+  const slider = $(sliderId);
+  const valueEl = $(valueId);
+  slider.value = next;
+  valueEl.value = next;
+  if (valueEl.tagName === "OUTPUT") {
+    setText(valueEl, next);
+  }
+  setRangeVisual(slider);
+  return next;
+}
+
+function applyTheme(theme) {
+  const normalized = theme === "light" ? "light" : "dark";
+  state.theme = normalized;
+  document.body.classList.toggle("theme-light", normalized === "light");
+  document.body.classList.toggle("theme-dark", normalized !== "light");
+  localStorage.setItem(themeKey, normalized);
+  renderThemeToggle();
+}
+
+function renderThemeToggle() {
+  if (!els.themeToggle) return;
+  const isLight = state.theme === "light";
+  setText(els.themeLabel, isLight ? "Dark" : "Light");
+  els.themeIcon.className = `mask ${isLight ? "icon-moon" : "icon-sun"}`;
 }
 
 function preheatMinTempC() {
@@ -218,7 +268,7 @@ function closeConfirm(result) {
   if (resolve) resolve(result);
 }
 
-function showAuth(setupMode) {
+function showAuth(setupMode, note = "") {
   state.setupMode = setupMode;
   els.appShell.classList.add("locked");
   els.authScreen.classList.remove("hidden");
@@ -226,7 +276,7 @@ function showAuth(setupMode) {
   setText(els.authTitle, setupMode ? "Create Web PIN" : "Unlock Device");
   setText(els.authCopy, setupMode ? "Create the local PIN used to protect ReflowDesk controls." : "Enter the local web PIN for this ReflowDesk.");
   setText(els.authSubmit, setupMode ? "Create PIN" : "Sign In");
-  setText(els.authNote, setupMode ? "Factory reset clears this PIN." : "");
+  setText(els.authNote, note || (setupMode ? "Factory reset clears this PIN." : ""));
   setTimeout(() => els.pinInput.focus(), 100);
 }
 
@@ -409,6 +459,8 @@ function renderDevice() {
   setText(els.deviceLine, `${state.device.model} | ${state.device.firmwareVersion}`);
   setText(els.ipPill, `IP: ${state.device.ip || "--"}`);
   setText(els.deviceSummary, `${state.device.name} ${state.device.model}`);
+  setText(els.otaCurrentVersion, state.device.firmwareVersion || "--");
+  setText(els.otaFreeSpace, `${Math.round((state.device.freeSketchSpace || 0) / 1024)} KB`);
   const info = [
     ["Firmware", state.device.firmwareVersion],
     ["Hardware", state.device.hardwareVersion],
@@ -433,8 +485,9 @@ function renderSettings() {
   if (!state.settings) return;
   $("safe-touch").value = state.settings.safeTouchC;
   $("safety-cutoff").value = state.settings.safetyCutoffC;
-  $("led-brightness").value = state.settings.ledBrightness;
-  $("buzzer-enabled").value = String(Boolean(state.settings.buzzerEnabled));
+  syncRangePair("led-brightness-slider", "led-brightness", state.settings.ledBrightness, 0, 100, 5);
+  const buzzerLevel = clamp(numberOr(state.settings.buzzerLevel, state.settings.buzzerEnabled ? 3 : 0), 0, 5);
+  syncRangePair("buzzer-level", "buzzer-level-value", buzzerLevel, 0, 5, 1);
   $("pid-kp").value = Number(state.settings.kp).toFixed(2);
   $("pid-ki").value = Number(state.settings.ki).toFixed(2);
   $("pid-kd").value = Number(state.settings.kd).toFixed(2);
@@ -748,19 +801,47 @@ function applySavedSnapshot(result, preferredProfileIndex = state.currentProfile
 }
 
 async function saveSettings() {
+  const ledBrightness = syncRangePair("led-brightness-slider", "led-brightness", $("led-brightness").value, 0, 100, 5);
+  const buzzerLevel = syncRangePair("buzzer-level", "buzzer-level-value", $("buzzer-level").value, 0, 5, 1);
   const body = {
     safeTouchC: Number($("safe-touch").value),
     safetyCutoffC: Number($("safety-cutoff").value),
-    ledBrightness: Number($("led-brightness").value),
-    buzzerEnabled: $("buzzer-enabled").value === "true",
+    ledBrightness,
+    buzzerLevel,
     kp: Number($("pid-kp").value),
     ki: Number($("pid-ki").value),
     kd: Number($("pid-kd").value),
+    setupApSsid: $("setup-ap-ssid").value.trim(),
     setupApPassword: $("setup-ap-password").value
   };
   const result = await api("/api/settings", { method: "PUT", body });
   applySavedSnapshot(result);
   toast("Settings saved.", "success");
+}
+
+async function changePin() {
+  const currentPin = $("current-pin").value.trim();
+  const pin = $("new-pin").value.trim();
+  const confirmPin = $("confirm-pin").value.trim();
+  if (pin.length < 4 || pin.length > 32) {
+    throw new Error("New PIN must be 4 to 32 characters.");
+  }
+  if (pin !== confirmPin) {
+    throw new Error("New PIN and confirmation do not match.");
+  }
+  await api("/api/auth/setup", { method: "POST", body: { currentPin, pin } });
+  if (state.ws) {
+    state.ws.close();
+    state.ws = null;
+  }
+  clearTimeout(state.reconnectTimer);
+  state.wsReady = false;
+  sessionStorage.removeItem(tokenKey);
+  state.token = "";
+  $("current-pin").value = "";
+  $("new-pin").value = "";
+  $("confirm-pin").value = "";
+  showAuth(false, "Web access PIN changed. Please sign in again with the new PIN.");
 }
 
 async function saveActiveProfileSelection() {
@@ -904,7 +985,25 @@ function bindEvents() {
     path: "/api/reflow/abort",
     success: "Abort requested."
   }));
-  $("save-settings-btn").addEventListener("click", () => saveSettings().catch(err => toast(err.message, "error")));
+  document.querySelectorAll("[data-save-settings], #save-settings-btn")
+    .forEach(btn => btn.addEventListener("click", () => saveSettings().catch(err => toast(err.message, "error"))));
+  $("change-pin-btn").addEventListener("click", () => changePin().catch(err => toast(err.message, "error")));
+  $("led-brightness-slider").addEventListener("input", event => {
+    syncRangePair("led-brightness-slider", "led-brightness", event.target.value, 0, 100, 5);
+  });
+  $("led-brightness").addEventListener("input", event => {
+    const next = quantize(event.target.value, 0, 100, 5);
+    const slider = $("led-brightness-slider");
+    slider.value = next;
+    setRangeVisual(slider);
+  });
+  $("led-brightness").addEventListener("change", event => {
+    syncRangePair("led-brightness-slider", "led-brightness", event.target.value, 0, 100, 5);
+  });
+  $("buzzer-level").addEventListener("input", event => {
+    syncRangePair("buzzer-level", "buzzer-level-value", event.target.value, 0, 5, 1);
+  });
+  els.themeToggle.addEventListener("click", () => applyTheme(state.theme === "light" ? "dark" : "light"));
   $("save-profile-btn").addEventListener("click", () => saveProfile().catch(err => toast(err.message, "error")));
   $("ota-form").addEventListener("submit", uploadOta);
   $("reboot-btn").addEventListener("click", () => confirmedCommand({
@@ -935,5 +1034,6 @@ function bindEvents() {
 }
 
 bindEvents();
+applyTheme(state.theme);
 window.addEventListener("hashchange", () => switchPage(pageFromHash(), false));
 checkAuth();

@@ -17,7 +17,9 @@ ReflowDesk is a desktop SMD reflow soldering hot plate controller. The current f
 - Rotary encoder input.
 - ESP32-S3 hosted ReflowDesk Web Interface for AT-MK1 and ESP32-S3 development targets.
 - WiFiManager router onboarding with a password-protected setup AP.
-- Local web PIN authentication, REST APIs, and WebSocket telemetry/events.
+- Local web PIN authentication, Web PIN change/re-lock behavior, REST APIs, and WebSocket telemetry/events.
+- Configurable setup AP credentials for future WiFiManager sessions.
+- Light and dark Web Interface themes served from local assets.
 - Web OTA upload for app-only PlatformIO `firmware.bin` images.
 - Heater control with time-windowed PID output.
 - Four saved solder paste reflow profiles stored in NVS.
@@ -26,10 +28,11 @@ ReflowDesk is a desktop SMD reflow soldering hot plate controller. The current f
 - Cooling fan PWM control, 12V fan power control, and tachometer feedback.
 - ReflowDesk AT-MK1 motherboard cooling fan PWM control and tachometer feedback.
 - ReflowDesk AT-MK1 dual NTC behavior: ambient NTC for PID compensation and motherboard NTC for ReflowDesk enclosure cooling.
-- Buzzer and status LED alerts.
+- Configurable buzzer sound level and status LED brightness alerts.
 - NVS-based settings storage with save-skipping for unchanged settings.
 - Smooth OLED auto-scroll for long focused text and adaptive settings row layout.
 - OLED/Web Interface synchronization for settings, profile changes, process state, telemetry, and event toasts.
+- Web settings cards with focused save actions for safety, feedback, PID, setup AP, and access changes.
 - Hardware selection and pin assignment through `src/config.h`.
 
 The current hardware release includes Gerber packages and schematic PDFs for:
@@ -233,6 +236,8 @@ The Web Interface is served locally from LittleFS and shares the same live firmw
 - Keep OTA limited to app-only PlatformIO `firmware.bin` images. Merged factory images are for external flashing tools, not browser OTA.
 - Keep WiFi setup AP credentials configurable through `src/config.h` and the Web Interface settings page.
 - Preserve local PIN authentication for protected API and WebSocket access.
+- When the Web PIN is changed, re-lock the browser session so the user must sign in with the new PIN.
+- Keep theme behavior local and deterministic. Theme-specific button, sidebar, input-focus, and slider colors should follow the documented ReflowDesk light/dark palette, while destructive/safety buttons keep their static warning colors.
 - Keep all web assets local under `data/`; do not introduce CDN dependencies for runtime UI behavior.
 - Update the asset version comments in `data/index.html`, `data/js/app.js`, and `data/css/style.css` when those files receive meaningful UI or behavior changes.
 - Build and upload the LittleFS image when files under `data/` change.
@@ -270,7 +275,13 @@ When adding a user setting:
 
 Settings should be understandable from the device UI without requiring a user to read the firmware.
 
-Reflow profile settings are grouped under profile slots instead of being shown as global stage values. Keep global settings limited to values that are truly device-wide, such as safety limits, buzzer behavior, LED brightness, and PID tuning.
+Reflow profile settings are grouped under profile slots instead of being shown as global stage values. Keep global settings limited to values that are truly device-wide, such as safety limits, buzzer sound level, LED brightness, and PID tuning.
+
+When adding or changing feedback controls:
+
+- Keep buzzer level in the 0 to 5 range, where 0 means muted.
+- Keep LED brightness in the 0 to 100 range with 5-point increments, where 0 means the status LED is off.
+- Keep OLED numeric controls and Web Interface sliders synchronized through the same `SettingsData` fields.
 
 When adding or changing profile fields:
 

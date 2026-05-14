@@ -9,7 +9,7 @@
 
 #include <Arduino.h>
 
-#define FW_VERSION "0.5.4"
+#define FW_VERSION "0.5.7"
 
 // Hardware selection
 // PlatformIO environments select the target with build flags. AT-MK1 is the default
@@ -42,8 +42,10 @@
 #endif
 #endif
 
-#if (defined(REFLOW_AT_MK1) || defined(ESP32_S3_PICO)) && defined(REFLOW_WEB_ENABLED)
+#if defined(REFLOW_AT_MK1) && defined(REFLOW_WEB_ENABLED)
 #define REFLOW_WEB_SETUP_AP_BASE_SSID "ReflowDesk-AT-MK1"
+#elif defined(ESP32_S3_PICO) && defined(REFLOW_WEB_ENABLED)
+#define REFLOW_WEB_SETUP_AP_BASE_SSID "ReflowDesk-Dev"
 #else
 #define REFLOW_WEB_SETUP_AP_BASE_SSID "ReflowDesk-Dev"
 #endif

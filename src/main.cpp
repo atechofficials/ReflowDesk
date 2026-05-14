@@ -110,8 +110,8 @@ void printSettingsLine(const SettingsData &data) {
   Serial.print(data.safeTouchC);
   Serial.print(F(" cut="));
   Serial.print(data.safetyCutoffC);
-  Serial.print(F(" buz="));
-  Serial.print(data.buzzerEnabled ? F("on") : F("off"));
+  Serial.print(F(" buzLvl="));
+  Serial.print(data.buzzerLevel);
   Serial.print(F(" cool="));
   Serial.print(SettingsStore::coolingProfileName(profile.coolingProfile));
   Serial.print(F(" pid="));
@@ -263,7 +263,7 @@ void setup() {
   AppWire.setClock(400000);
   settings.begin();
   settings.validate();
-  alerts.setBuzzerEnabled(settings.data().buzzerEnabled != 0);
+  alerts.setBuzzerLevel(settings.data().buzzerLevel);
   alerts.setLedBrightness(settings.data().ledBrightness);
 
   sensors.begin();
@@ -312,7 +312,7 @@ void loop() {
 #if REFLOW_DEBUG
   printEventLog(now);
 #endif
-  alerts.setBuzzerEnabled(settings.data().buzzerEnabled != 0);
+  alerts.setBuzzerLevel(settings.data().buzzerLevel);
   alerts.updateStatusLed(sample.plateC, settings.data(), reflow.isFaultLike());
   alerts.tick(now);
 #if REFLOW_HAS_BOARD_FAN

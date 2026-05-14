@@ -60,7 +60,9 @@ private:
   bool beginAuth();
   String setupApName() const;
   String setupApPassword() const;
+  bool setupApNameIsValid(const String &name) const;
   bool setupApPasswordIsValid(const String &password) const;
+  bool saveSetupApName(const String &name);
   bool saveSetupApPassword(const String &password);
   bool pinIsSet() const { return _pinSet; }
   bool validSessionToken(const String &token) const;

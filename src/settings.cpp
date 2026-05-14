@@ -15,7 +15,8 @@
 
 namespace {
 constexpr uint32_t SETTINGS_MAGIC = 0x52465031UL; // RFP1
-constexpr uint16_t SETTINGS_VERSION = 3;
+constexpr uint16_t SETTINGS_VERSION = 4;
+constexpr uint16_t SETTINGS_LEGACY_VERSION_3 = 3;
 constexpr uint16_t SETTINGS_LEGACY_VERSION_2 = 2;
 constexpr uint16_t SETTINGS_LEGACY_VERSION_1 = 1;
 constexpr const char *SETTINGS_NAMESPACE = "reflow";
@@ -159,7 +160,7 @@ SettingsData SettingsStore::defaults() {
   }
   settings.safeTouchC = 45;
   settings.safetyCutoffC = 245;
-  settings.buzzerEnabled = 1;
+  settings.buzzerLevel = 3;
   settings.kpX100 = 700;
   settings.kiX100 = 6;
   settings.kdX100 = 2000;
@@ -197,11 +198,13 @@ void SettingsStore::validate() {
   if (_data.safetyCutoffC <= highestReflowC) {
     _data.safetyCutoffC = clampValue<int16_t>(highestReflowC + 10, Limits::SAFETY_MIN_C, Limits::SAFETY_MAX_C);
   }
-  _data.buzzerEnabled = _data.buzzerEnabled ? 1 : 0;
+  _data.buzzerLevel = clampValue<uint8_t>(_data.buzzerLevel, 0, 5);
   _data.kpX100 = clampValue<int16_t>(_data.kpX100, 0, 3000);
   _data.kiX100 = clampValue<int16_t>(_data.kiX100, 0, 500);
   _data.kdX100 = clampValue<int16_t>(_data.kdX100, 0, 20000);
-  _data.ledBrightness = clampValue<uint8_t>(_data.ledBrightness, 5, 120);
+  _data.ledBrightness = clampValue<uint8_t>(_data.ledBrightness, 0, 100);
+  _data.ledBrightness = static_cast<uint8_t>(((_data.ledBrightness + 2) / 5) * 5);
+  _data.ledBrightness = clampValue<uint8_t>(_data.ledBrightness, 0, 100);
   _data.crc = expectedCrc(_data);
 }
 
@@ -228,6 +231,26 @@ bool SettingsStore::load() {
     Serial.println(F("NVS load reject: read length"));
 #endif
     return false;
+  }
+  if (candidate.magic == SETTINGS_MAGIC && candidate.version == SETTINGS_LEGACY_VERSION_3 &&
+      candidate.length == sizeof(SettingsData)) {
+    uint16_t expected = expectedCrc(candidate);
+    if (candidate.crc != expected) {
+#if REFLOW_DEBUG
+      Serial.print(F("NVS v3 load reject: crc stored=0x"));
+      Serial.print(candidate.crc, HEX);
+      Serial.print(F(" expected=0x"));
+      Serial.println(expected, HEX);
+#endif
+      return false;
+    }
+    _data = candidate;
+    _data.buzzerLevel = _data.buzzerLevel ? 3 : 0;
+    validate();
+#if REFLOW_DEBUG
+    Serial.println(F("NVS v3 settings migrated to buzzer level"));
+#endif
+    return true;
   }
   if (candidate.magic != SETTINGS_MAGIC || candidate.version != SETTINGS_VERSION || candidate.length != sizeof(SettingsData)) {
 #if REFLOW_DEBUG
@@ -307,7 +330,7 @@ bool SettingsStore::loadLegacy() {
   _data.selectedProfileIndex = 0;
   _data.safeTouchC = legacy.safeTouchC;
   _data.safetyCutoffC = legacy.safetyCutoffC;
-  _data.buzzerEnabled = legacy.buzzerEnabled;
+  _data.buzzerLevel = legacy.buzzerEnabled ? 3 : 0;
   _data.kpX100 = legacy.kpX100;
   _data.kiX100 = legacy.kiX100;
   _data.kdX100 = legacy.kdX100;

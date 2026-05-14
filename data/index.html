@@ -1,5 +1,5 @@
 <!-- ReflowDesk Web Interface -->
-<!-- Version: 1.1.0 -->
+<!-- Version: 1.2.4 -->
 <!-- Github: https://github.com/atechofficials/ReflowDesk -->
 <!-- Author: Mrinal @atechofficials -->
 <!-- License: General Public License v3.0 -->
@@ -15,7 +15,7 @@
   <script src="/js/vendor/chart.umd.js"></script>
   <script src="/js/app.js" defer></script>
 </head>
-<body>
+<body class="theme-dark">
   <div class="auth-screen" id="auth-screen">
     <div class="auth-card">
       <div class="brand-block">
@@ -53,7 +53,11 @@
         <button class="nav-btn" data-page="logs"><span class="mask icon-alert"></span>Logs</button>
       </nav>
       <div class="sidebar-footer">
-        <span id="side-fw">FW -</span>
+        <span class="firmware-pill" id="side-fw">FW -</span>
+        <span class="developer-line">Developed by A-Tech Officials</span>
+        <a class="github-btn" href="https://github.com/atechofficials/ReflowDesk" target="_blank" rel="noopener">
+          <span class="mask icon-github"></span>GitHub
+        </a>
         <button id="logout-btn" class="ghost-btn">Logout</button>
       </div>
     </aside>
@@ -225,13 +229,45 @@
               <h2>Device Settings</h2>
               <p>These values are shared with the OLED settings page.</p>
             </div>
-            <button class="primary-btn" id="save-settings-btn">Save Settings</button>
           </div>
         </section>
         <form class="settings-grid" id="settings-form">
+          <section class="panel settings-wide settings-section access-panel">
+            <div class="panel-head compact-head">
+              <h2>Web Interface Access</h2>
+            </div>
+            <p>Change the local PIN used to protect ReflowDesk controls.</p>
+            <div class="warning-box">
+              If this PIN is forgotten, factory reset clears it and lets you create a new one.
+            </div>
+            <div class="form-grid access-form">
+              <label>Current PIN<input id="current-pin" type="password" minlength="4" maxlength="32" autocomplete="current-password"></label>
+              <label>New PIN<input id="new-pin" type="password" minlength="4" maxlength="32" autocomplete="new-password"></label>
+              <label>Confirm New PIN<input id="confirm-pin" type="password" minlength="4" maxlength="32" autocomplete="new-password"></label>
+            </div>
+            <div class="button-row settings-action-row">
+              <button class="ghost-btn icon-btn" id="change-pin-btn" type="button"><span class="mask icon-lock"></span>Change PIN</button>
+            </div>
+          </section>
+          <section class="panel settings-section appearance-panel">
+            <div class="panel-head compact-head">
+              <h2>Appearance</h2>
+            </div>
+            <div class="appearance-control">
+              <div>
+                <strong>Interface Theme</strong>
+                <small>Switch between light and dark mode.</small>
+              </div>
+              <button class="theme-toggle" id="theme-toggle" type="button">
+                <span class="mask icon-sun" id="theme-icon"></span>
+                <span id="theme-label">Dark</span>
+              </button>
+            </div>
+          </section>
           <section class="panel">
             <div class="panel-head compact-head">
               <h2>Safety</h2>
+              <button class="ghost-btn panel-save-btn" type="button" data-save-settings>Save Safety</button>
             </div>
             <div class="form-grid">
               <label>Safe Touch C<input id="safe-touch" type="number"></label>
@@ -241,15 +277,27 @@
           <section class="panel">
             <div class="panel-head compact-head">
               <h2>Feedback</h2>
+              <button class="ghost-btn panel-save-btn" type="button" data-save-settings>Save Feedback</button>
             </div>
             <div class="form-grid">
-              <label>LED Brightness<input id="led-brightness" type="number"></label>
-              <label>Buzzer<select id="buzzer-enabled"><option value="true">On</option><option value="false">Off</option></select></label>
+              <label class="range-label">LED Brightness
+                <div class="range-row">
+                  <input id="led-brightness-slider" type="range" min="0" max="100" step="5">
+                  <input id="led-brightness" class="range-number" type="number" min="0" max="100" step="5">
+                </div>
+              </label>
+              <label class="range-label">Buzzer Sound Level
+                <div class="range-row">
+                  <input id="buzzer-level" type="range" min="0" max="5" step="1">
+                  <output id="buzzer-level-value">3</output>
+                </div>
+              </label>
             </div>
           </section>
           <section class="panel">
             <div class="panel-head compact-head">
               <h2>PID Loop</h2>
+              <button class="ghost-btn panel-save-btn" type="button" data-save-settings>Save PID</button>
             </div>
             <div class="form-grid">
               <label>Kp<input id="pid-kp" type="number" step="0.01"></label>
@@ -257,29 +305,59 @@
               <label>Kd<input id="pid-kd" type="number" step="0.01"></label>
             </div>
           </section>
-          <section class="panel">
+          <section class="panel settings-wide settings-section wifi-panel">
             <div class="panel-head compact-head">
               <h2>WiFi Setup AP</h2>
+              <button class="ghost-btn panel-save-btn" type="button" data-save-settings>Save AP Config</button>
+            </div>
+            <p>These credentials are used when ReflowDesk opens its setup hotspot for router WiFi configuration.</p>
+            <div class="wifi-context-row">
+              <div>
+                <span>Access Mode</span>
+                <strong>Setup Portal</strong>
+              </div>
+              <div>
+                <span>Applies To</span>
+                <strong>Next WiFi setup session</strong>
+              </div>
             </div>
             <div class="form-grid">
-              <label>Setup AP SSID<input id="setup-ap-ssid" readonly></label>
-              <label>Setup AP Password<input id="setup-ap-password" type="password" minlength="8" maxlength="63"></label>
+              <label>Setup AP SSID<input id="setup-ap-ssid" maxlength="32"></label>
+              <label>Setup AP Password<input id="setup-ap-password" type="password" minlength="8" maxlength="63" placeholder="8 to 63 characters"></label>
             </div>
+            <div class="inline-note">Changes are saved with device settings and take effect the next time the setup portal opens.</div>
           </section>
           </form>
       </section>
 
       <section class="page" id="page-device">
         <div class="split-layout">
-          <section class="panel">
+          <section class="panel ota-panel">
             <div class="panel-head">
               <div>
                 <h2>Firmware OTA</h2>
                 <p>Upload the PlatformIO app firmware.bin image.</p>
               </div>
             </div>
+            <div class="warning-box ota-warning">
+              Only upload the app firmware binary for this hardware target. Merged factory images are not supported by web OTA.
+            </div>
+            <div class="ota-facts">
+              <div>
+                <span>Current Version</span>
+                <strong id="ota-current-version">--</strong>
+              </div>
+              <div>
+                <span>OTA Free</span>
+                <strong id="ota-free-space">--</strong>
+              </div>
+              <div>
+                <span>Firmware Type</span>
+                <strong>firmware.bin</strong>
+              </div>
+            </div>
             <form id="ota-form" class="ota-form">
-              <input id="ota-file" type="file" accept=".bin">
+              <label>Firmware Binary<input id="ota-file" type="file" accept=".bin"></label>
               <button class="primary-btn" type="submit">Upload Firmware</button>
             </form>
             <div class="progress"><div id="ota-progress"></div></div>

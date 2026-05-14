@@ -27,6 +27,7 @@ constexpr uint16_t TELEMETRY_MS = 500;
 constexpr const char *AUTH_NAMESPACE = "reflow_web";
 constexpr const char *AUTH_SALT_KEY = "salt";
 constexpr const char *AUTH_HASH_KEY = "hash";
+constexpr const char *SETUP_AP_SSID_KEY = "ap_ssid";
 constexpr const char *SETUP_AP_PASSWORD_KEY = "ap_pass";
 constexpr const char *TOKEN_HEADER = "X-Reflow-Token";
 constexpr const char *MDNS_NAME = "reflowdesk";
@@ -34,6 +35,8 @@ constexpr size_t MAX_PIN_LEN = 32;
 constexpr size_t MIN_PIN_LEN = 4;
 constexpr size_t MIN_AP_PASSWORD_LEN = 8;
 constexpr size_t MAX_AP_PASSWORD_LEN = 63;
+constexpr size_t MIN_AP_SSID_LEN = 1;
+constexpr size_t MAX_AP_SSID_LEN = 32;
 constexpr uint8_t MAX_WS_CLIENTS = WEBSOCKETS_SERVER_CLIENT_MAX;
 
 const char *HEADER_KEYS[] = {TOKEN_HEADER};
@@ -113,7 +116,7 @@ void ReflowWebServer::loop(uint32_t now) {
 
   if (_settings != nullptr && _settings->revision() != _lastSettingsRevision) {
     _lastSettingsRevision = _settings->revision();
-    _alerts->setBuzzerEnabled(_settings->data().buzzerEnabled != 0);
+    _alerts->setBuzzerLevel(_settings->data().buzzerLevel);
     _alerts->setLedBrightness(_settings->data().ledBrightness);
     broadcastEvent("success", "Settings changed on device.");
     broadcastTelemetry(now, true);
@@ -188,7 +191,7 @@ void ReflowWebServer::configureWiFi() {
   wifiManager.setDebugOutput(REFLOW_DEBUG != 0);
 
   if (_ui != nullptr) {
-    _ui->showStatus("WiFi Setup", apName.c_str(), "Open WiFi portal");
+    _ui->showStatus("WiFi Setup", apName.c_str(), "Open 192.168.4.1");
   }
 
   bool connected = wifiManager.autoConnect(apName.c_str(), apPassword.c_str());
@@ -280,7 +283,8 @@ void ReflowWebServer::handleAuthStatus() {
 }
 
 void ReflowWebServer::handleAuthSetup() {
-  if (pinIsSet() && !authenticatedRequest()) {
+  const bool existingPin = pinIsSet();
+  if (existingPin && !authenticatedRequest()) {
     sendError(401, "Authentication required");
     return;
   }
@@ -288,6 +292,13 @@ void ReflowWebServer::handleAuthSetup() {
   if (!bodyToJson(_server.arg("plain"), doc)) {
     sendError(400, "Invalid JSON");
     return;
+  }
+  if (existingPin) {
+    String currentPin = doc["currentPin"] | "";
+    if (!verifyPin(currentPin)) {
+      sendError(401, "Current PIN is incorrect");
+      return;
+    }
   }
   String pin = doc["pin"] | "";
   if (!createPin(pin)) {
@@ -298,9 +309,9 @@ void ReflowWebServer::handleAuthSetup() {
   JsonDocument out;
   out["ok"] = true;
   out["token"] = _sessionToken;
-  out["message"] = "PIN saved";
+  out["message"] = existingPin ? "PIN updated" : "PIN saved";
   sendJson(200, out);
-  broadcastEvent("success", "Web PIN configured.");
+  broadcastEvent("success", existingPin ? "Web PIN updated." : "Web PIN configured.");
 }
 
 void ReflowWebServer::handleAuthLogin() {
@@ -392,11 +403,14 @@ void ReflowWebServer::handleSettingsPut() {
   if (doc["safetyCutoffC"].is<int>()) {
     candidate.safetyCutoffC = clampI16(doc["safetyCutoffC"].as<int>(), Limits::SAFETY_MIN_C, Limits::SAFETY_MAX_C);
   }
-  if (doc["buzzerEnabled"].is<bool>()) {
-    candidate.buzzerEnabled = doc["buzzerEnabled"].as<bool>() ? 1 : 0;
+  if (doc["buzzerLevel"].is<int>()) {
+    candidate.buzzerLevel = clampLocal<int>(doc["buzzerLevel"].as<int>(), 0, 5);
+  } else if (doc["buzzerEnabled"].is<bool>()) {
+    candidate.buzzerLevel = doc["buzzerEnabled"].as<bool>() ? 3 : 0;
   }
   if (doc["ledBrightness"].is<int>()) {
-    candidate.ledBrightness = clampLocal<int>(doc["ledBrightness"].as<int>(), 5, 120);
+    int ledBrightness = clampLocal<int>(doc["ledBrightness"].as<int>(), 0, 100);
+    candidate.ledBrightness = clampLocal<int>(((ledBrightness + 2) / 5) * 5, 0, 100);
   }
   if (doc["kp"].is<float>()) {
     candidate.kpX100 = clampI16(static_cast<int>(doc["kp"].as<float>() * 100.0f + 0.5f), 0, 3000);
@@ -406,6 +420,17 @@ void ReflowWebServer::handleSettingsPut() {
   }
   if (doc["kd"].is<float>()) {
     candidate.kdX100 = clampI16(static_cast<int>(doc["kd"].as<float>() * 100.0f + 0.5f), 0, 20000);
+  }
+  bool updateApName = false;
+  String apName;
+  if (doc["setupApSsid"].is<const char *>()) {
+    apName = doc["setupApSsid"].as<const char *>();
+    apName.trim();
+    if (!setupApNameIsValid(apName)) {
+      sendError(400, "Setup AP SSID must be 1 to 32 characters");
+      return;
+    }
+    updateApName = true;
   }
   bool updateApPassword = false;
   String apPassword;
@@ -418,6 +443,10 @@ void ReflowWebServer::handleSettingsPut() {
     updateApPassword = true;
   }
 
+  if (updateApName && !saveSetupApName(apName)) {
+    sendError(500, "Failed to save setup AP SSID");
+    return;
+  }
   if (updateApPassword && !saveSetupApPassword(apPassword)) {
     sendError(500, "Failed to save setup AP password");
     return;
@@ -579,7 +608,7 @@ void ReflowWebServer::handleFactoryReset() {
   _lastSettingsRevision = _settings->revision();
   _seenResetCount = _settings->resetCount();
   resetPin();
-  _alerts->setBuzzerEnabled(_settings->data().buzzerEnabled != 0);
+  _alerts->setBuzzerLevel(_settings->data().buzzerLevel);
   _alerts->setLedBrightness(_settings->data().ledBrightness);
   if (!saved) {
     sendError(500, "Factory reset failed to save");
@@ -712,6 +741,13 @@ String ReflowWebServer::setupApName() const {
   if (_setupApName.length() > 0) {
     return _setupApName;
   }
+  String savedName =
+      _authPrefs.isKey(SETUP_AP_SSID_KEY) ? _authPrefs.getString(SETUP_AP_SSID_KEY, "") : "";
+  savedName.trim();
+  if (setupApNameIsValid(savedName)) {
+    _setupApName = savedName;
+    return _setupApName;
+  }
   uint8_t mac[6] = {};
   if (esp_read_mac(mac, ESP_MAC_WIFI_STA) != ESP_OK) {
     WiFi.macAddress(mac);
@@ -720,6 +756,10 @@ String ReflowWebServer::setupApName() const {
   snprintf(name, sizeof(name), "%s-%02X-%02X", REFLOW_WEB_SETUP_AP_BASE_SSID, mac[4], mac[5]);
   _setupApName = name;
   return _setupApName;
+}
+
+bool ReflowWebServer::setupApNameIsValid(const String &name) const {
+  return name.length() >= MIN_AP_SSID_LEN && name.length() <= MAX_AP_SSID_LEN;
 }
 
 String ReflowWebServer::setupApPassword() const {
@@ -733,6 +773,16 @@ String ReflowWebServer::setupApPassword() const {
 
 bool ReflowWebServer::setupApPasswordIsValid(const String &password) const {
   return password.length() >= MIN_AP_PASSWORD_LEN && password.length() <= MAX_AP_PASSWORD_LEN;
+}
+
+bool ReflowWebServer::saveSetupApName(const String &name) {
+  String cleanName = name;
+  cleanName.trim();
+  if (!setupApNameIsValid(cleanName)) {
+    return false;
+  }
+  _setupApName = cleanName;
+  return _authPrefs.putString(SETUP_AP_SSID_KEY, cleanName) > 0;
 }
 
 bool ReflowWebServer::saveSetupApPassword(const String &password) {
@@ -810,7 +860,7 @@ void ReflowWebServer::applySettings(const SettingsData &candidate, const char *e
     sendError(500, "Failed to save settings");
     return;
   }
-  _alerts->setBuzzerEnabled(_settings->data().buzzerEnabled != 0);
+  _alerts->setBuzzerLevel(_settings->data().buzzerLevel);
   _alerts->setLedBrightness(_settings->data().ledBrightness);
   _lastSettingsRevision = _settings->revision();
   JsonDocument doc;
@@ -828,6 +878,9 @@ void ReflowWebServer::resetWiFiCredentials() {
   WiFiManager wifiManager;
   wifiManager.resetSettings();
   WiFi.disconnect(true, true);
+  _authPrefs.remove(SETUP_AP_SSID_KEY);
+  _authPrefs.remove(SETUP_AP_PASSWORD_KEY);
+  _setupApName = "";
 }
 
 void ReflowWebServer::sendJson(int code, JsonDocument &doc) {
@@ -905,7 +958,8 @@ void ReflowWebServer::addSettingsJson(JsonObject obj, const SettingsData &data) 
   obj["selectedProfileIndex"] = data.selectedProfileIndex;
   obj["safeTouchC"] = data.safeTouchC;
   obj["safetyCutoffC"] = data.safetyCutoffC;
-  obj["buzzerEnabled"] = data.buzzerEnabled != 0;
+  obj["buzzerLevel"] = data.buzzerLevel;
+  obj["buzzerEnabled"] = data.buzzerLevel != 0;
   obj["ledBrightness"] = data.ledBrightness;
   obj["kp"] = SettingsStore::kp(data);
   obj["ki"] = SettingsStore::ki(data);

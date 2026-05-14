@@ -10,7 +10,7 @@ ReflowDesk is a small desktop SMD reflow soldering hot plate designed for makers
 
 The project is currently in active development. The first hardware revision, **ReflowDesk AT-MK1**, is available as early hardware manufacturing files for prototype validation.
 
-Current firmware version: **v0.5.4**.
+Current firmware version: **v0.5.7**.
 
 ---
 
@@ -33,12 +33,15 @@ ReflowDesk is intended to sit on a workbench and provide a controlled heating su
 - ESP32-S3 hosted ReflowDesk Web Interface for AT-MK1 and ESP32-S3 development targets.
 - WiFiManager based first-boot WiFi onboarding with password-protected setup AP.
 - Local web PIN authentication for protected device controls.
+- Web PIN change flow with automatic re-lock after credential updates.
+- Light and dark Web Interface themes using local icon assets.
 - Live REST/WebSocket sync between the OLED GUI and Web Interface.
 - Browser-based reflow start, emergency stop, live telemetry, and event notifications.
 - Realtime Chart.js reflow process graph for hot plate, set target, and ambient room temperatures.
 - Browser-based reflow profile editor with profile renaming and editable curve graph.
 - Web OTA firmware upload for PlatformIO app `firmware.bin` images.
 - Web controls for reboot and factory reset with safety lockouts.
+- Configurable WiFiManager setup AP name/password, with MAC-suffixed default SSID.
 - Four saved solder paste reflow profiles with selectable active profile.
 - Reflow profile presets for preheat, soak, reflow, and cooling behavior.
 - JSON-based reflow profile provisioning through `data/profiles/profile-1.json` to `profile-4.json`.
@@ -52,8 +55,8 @@ ReflowDesk is intended to sit on a workbench and provide a controlled heating su
 - Cooling fan support with speed control and fan status monitoring.
 - ReflowDesk AT-MK1 motherboard cooling fan support with independent PWM/tach monitoring.
 - Ambient and motherboard NTC temperature sensing support on AT-MK1 hardware.
-- Visual status indication with addressable RGB LED support.
-- System buzzer for user alerts and process notifications.
+- Adjustable visual status indication with addressable RGB LED support.
+- Configurable buzzer sound level for user alerts and process notifications.
 - Safety cutoff support for over-temperature and fault conditions.
 - Designed to support AC and DC PTC heating element options.
 - Breadboard-friendly reference pinout resources for common ESP32 boards and project modules.
@@ -69,12 +72,13 @@ ReflowDesk is intended to sit on a workbench and provide a controlled heating su
 | v0.3.0 | Added ReflowDesk AT-MK1 ESP32-S3 hardware support, 8 MB OTA partition layout, hardware-selectable pin configuration, ADS1115 ALERT/RDY pin definition, second PWM cooling fan support, dual NTC support for ambient and motherboard temperature sensing, motherboard cooling fan failsafe behavior, and GUI warning for motherboard fan failure. |
 | v0.4.0 | Added four stored solder paste reflow profiles, JSON profile provisioning from LittleFS, on-device profile editing, version-3 settings migration from legacy global curve settings, smooth auto-scrolling OLED text, adaptive settings/profile editor layout, settings cursor reset on menu entry, ESP32-S3 Pico development target fixes, and 16 MB / 4 MB OTA development partition tables. |
 | v0.5.4 | Added the ESP32-S3 hosted ReflowDesk Web Interface with WiFiManager onboarding, local PIN authentication, REST APIs, WebSocket telemetry/events, live Chart.js reflow graphs, web reflow controls, synchronized settings/profile edits, profile renaming, web OTA firmware upload, device reboot/factory reset controls, route persistence, hardware-originated settings change toasts, safer emergency-stop lockouts, stage-target notifications, and ambient NTC transient filtering. |
+| v0.5.7 | Refined the Web Interface with PIN change/re-lock behavior, light/dark theme switching, themed sidebar and control styling, per-card settings save actions, configurable setup AP credentials, static safety action button colors, improved OTA card details, LED brightness and buzzer level sliders, and OLED WiFi setup portal IP display. Updated settings storage to version 4 for buzzer level and LED brightness behavior. |
 
 ---
 
 ## Web Interface
 
-Firmware v0.5.4 introduces the ReflowDesk Web Interface for ESP32-S3 targets. On first boot, the device starts a password-protected WiFiManager setup access point so router credentials can be configured. After joining the router, the web console is hosted from LittleFS at the device IP address.
+Firmware v0.5.4 introduced the ReflowDesk Web Interface for ESP32-S3 targets. On first boot, the device starts a password-protected WiFiManager setup access point so router credentials can be configured. After joining the router, the web console is hosted from LittleFS at the device IP address.
 
 The Web Interface mirrors the same firmware state used by the OLED GUI:
 
@@ -83,6 +87,10 @@ The Web Interface mirrors the same firmware state used by the OLED GUI:
 - Edit global settings from either UI and keep the other UI synchronized.
 - Select, rename, and edit reflow profiles from the browser.
 - View live process telemetry, faults, fan state/RPM, SSR state/duty, stage timing, and safety status.
+- Change the Web Interface PIN and sign in again after the interface re-locks.
+- Switch between local light and dark themes.
+- Adjust buzzer sound level and status LED brightness.
+- Change setup AP credentials used by future WiFiManager sessions.
 - Upload app-only PlatformIO `firmware.bin` images through web OTA when the hot plate is idle and safe.
 
 The web console uses local assets stored under `data/` and does not require internet access after the files are uploaded to LittleFS.
@@ -91,9 +99,9 @@ The web console uses local assets stored under `data/` and does not require inte
 
 | Asset | Version |
 | --- | --- |
-| `data/index.html` | v1.1.0 |
-| `data/js/app.js` | v1.1.0 |
-| `data/css/style.css` | v1.0.0 |
+| `data/index.html` | v1.2.4 |
+| `data/js/app.js` | v1.2.5 |
+| `data/css/style.css` | v1.1.6 |
 
 ---
 

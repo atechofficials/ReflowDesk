@@ -41,7 +41,7 @@ struct SettingsData {
   uint16_t version;
   uint16_t length;
   uint8_t selectedProfileIndex;
-  uint8_t buzzerEnabled;
+  uint8_t buzzerLevel;
   uint8_t ledBrightness;
   uint8_t reserved1;
   ReflowProfile profiles[REFLOW_PROFILE_COUNT];

@@ -7,9 +7,26 @@
 
 #include "alerts.h"
 
+namespace {
+constexpr uint32_t BUZZER_PWM_FREQ_HZ = 2700;
+constexpr uint8_t BUZZER_PWM_BITS = 8;
+#if !(defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3)
+constexpr uint8_t BUZZER_PWM_CHANNEL = 6;
+#endif
+
+uint8_t buzzerDutyForLevel(uint8_t level) {
+  static constexpr uint8_t dutyByLevel[] = {0, 32, 64, 96, 144, 220};
+  if (level > 5) {
+    level = 5;
+  }
+  return dutyByLevel[level];
+}
+}
+
 void AlertManager::begin() {
   pinMode(Pins::BUZZER, OUTPUT);
-  digitalWrite(Pins::BUZZER, LOW);
+  attachBuzzerPwm();
+  stopBuzzer();
   _led.begin();
   _led.setBrightness(45);
   _led.show();
@@ -20,13 +37,10 @@ void AlertManager::setLedBrightness(uint8_t brightness) {
   _led.show();
 }
 
-void AlertManager::setBuzzerEnabled(bool enabled) {
-  _buzzerEnabled = enabled;
-  if (!_buzzerEnabled) {
-    _remainingBeeps = 0;
-    _buzzing = false;
-    _nextToggleMs = 0;
-    digitalWrite(Pins::BUZZER, LOW);
+void AlertManager::setBuzzerLevel(uint8_t level) {
+  _buzzerLevel = level > 5 ? 5 : level;
+  if (_buzzerLevel == 0) {
+    stopBuzzer();
   }
 }
 
@@ -35,7 +49,7 @@ void AlertManager::beep(uint16_t durationMs) {
 }
 
 void AlertManager::beepPattern(uint8_t count, uint16_t durationMs, uint16_t gapMs) {
-  if (!_buzzerEnabled || count == 0 || durationMs == 0) {
+  if (_buzzerLevel == 0 || count == 0 || durationMs == 0) {
     return;
   }
   _remainingBeeps = count;
@@ -46,11 +60,8 @@ void AlertManager::beepPattern(uint8_t count, uint16_t durationMs, uint16_t gapM
 }
 
 void AlertManager::tick(uint32_t now) {
-  if (!_buzzerEnabled) {
-    _remainingBeeps = 0;
-    _buzzing = false;
-    _nextToggleMs = 0;
-    digitalWrite(Pins::BUZZER, LOW);
+  if (_buzzerLevel == 0) {
+    stopBuzzer();
     return;
   }
   if (_remainingBeeps == 0) {
@@ -61,11 +72,11 @@ void AlertManager::tick(uint32_t now) {
   }
 
   if (!_buzzing) {
-    digitalWrite(Pins::BUZZER, HIGH);
+    writeBuzzer(true);
     _buzzing = true;
     _nextToggleMs = now + _beepMs;
   } else {
-    digitalWrite(Pins::BUZZER, LOW);
+    writeBuzzer(false);
     _buzzing = false;
     --_remainingBeeps;
     _nextToggleMs = _remainingBeeps > 0 ? now + _gapMs : 0;
@@ -90,4 +101,29 @@ void AlertManager::updateStatusLed(float plateC, const SettingsData &settings, b
 void AlertManager::setLed(uint8_t r, uint8_t g, uint8_t b) {
   _led.setPixelColor(0, _led.Color(r, g, b));
   _led.show();
+}
+
+void AlertManager::attachBuzzerPwm() {
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
+  ledcAttach(Pins::BUZZER, BUZZER_PWM_FREQ_HZ, BUZZER_PWM_BITS);
+#else
+  ledcSetup(BUZZER_PWM_CHANNEL, BUZZER_PWM_FREQ_HZ, BUZZER_PWM_BITS);
+  ledcAttachPin(Pins::BUZZER, BUZZER_PWM_CHANNEL);
+#endif
+}
+
+void AlertManager::writeBuzzer(bool enabled) {
+  const uint8_t duty = enabled ? buzzerDutyForLevel(_buzzerLevel) : 0;
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
+  ledcWrite(Pins::BUZZER, duty);
+#else
+  ledcWrite(BUZZER_PWM_CHANNEL, duty);
+#endif
+}
+
+void AlertManager::stopBuzzer() {
+  _remainingBeeps = 0;
+  _buzzing = false;
+  _nextToggleMs = 0;
+  writeBuzzer(false);
 }

@@ -220,7 +220,7 @@ void UiManager::handleInput(const InputEvent &event, SettingsStore &settings, Re
       }
       if (event.click) {
         commitSettingsDraft(settings);
-        alerts.setBuzzerEnabled(settings.data().buzzerEnabled != 0);
+        alerts.setBuzzerLevel(settings.data().buzzerLevel);
         alerts.setLedBrightness(settings.data().ledBrightness);
         _screen = Screen::Settings;
       }
@@ -235,7 +235,7 @@ void UiManager::handleInput(const InputEvent &event, SettingsStore &settings, Re
       if (event.click) {
         if (_profileSelection == P_IDX_BACK) {
           commitSettingsDraft(settings);
-          alerts.setBuzzerEnabled(settings.data().buzzerEnabled != 0);
+          alerts.setBuzzerLevel(settings.data().buzzerLevel);
           alerts.setLedBrightness(settings.data().ledBrightness);
           _screen = Screen::Settings;
         } else if (_profileSelection != P_IDX_NAME) {
@@ -272,7 +272,7 @@ void UiManager::handleInput(const InputEvent &event, SettingsStore &settings, Re
           settings.resetDefaults();
           settings.save();
           beginSettingsDraft(settings.data());
-          alerts.setBuzzerEnabled(settings.data().buzzerEnabled != 0);
+          alerts.setBuzzerLevel(settings.data().buzzerLevel);
           alerts.setLedBrightness(settings.data().ledBrightness);
         }
         _screen = Screen::Settings;
@@ -639,7 +639,7 @@ void UiManager::settingValueText(const SettingsData &settings, uint8_t index, ch
       snprintf(buffer, length, "%dC", settings.safetyCutoffC);
       break;
     case IDX_BUZZER:
-      snprintf(buffer, length, "%s", settings.buzzerEnabled ? "On" : "Off");
+      snprintf(buffer, length, "%u", static_cast<unsigned>(settings.buzzerLevel));
       break;
     case IDX_KP:
       dtostrf(SettingsStore::kp(settings), 0, 2, buffer);
@@ -722,7 +722,7 @@ void UiManager::adjustSetting(SettingsData &settings, int8_t delta, uint8_t inde
       settings.safetyCutoffC = clampLocal<int16_t>(settings.safetyCutoffC + delta, Limits::SAFETY_MIN_C, Limits::SAFETY_MAX_C);
       break;
     case IDX_BUZZER:
-      settings.buzzerEnabled = settings.buzzerEnabled ? 0 : 1;
+      settings.buzzerLevel = clampLocal<int>(static_cast<int>(settings.buzzerLevel) + delta, 0, 5);
       break;
     case IDX_KP:
       settings.kpX100 = clampLocal<int16_t>(settings.kpX100 + delta * 10, 0, 3000);

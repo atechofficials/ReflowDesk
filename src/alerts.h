@@ -16,7 +16,7 @@
 class AlertManager {
 public:
   void begin();
-  void setBuzzerEnabled(bool enabled);
+  void setBuzzerLevel(uint8_t level);
   void setLedBrightness(uint8_t brightness);
   void beep(uint16_t durationMs);
   void beepPattern(uint8_t count, uint16_t durationMs, uint16_t gapMs);
@@ -25,9 +25,12 @@ public:
 
 private:
   void setLed(uint8_t r, uint8_t g, uint8_t b);
+  void attachBuzzerPwm();
+  void writeBuzzer(bool enabled);
+  void stopBuzzer();
 
   Adafruit_NeoPixel _led = Adafruit_NeoPixel(1, Pins::STATUS_LED, NEO_GRB + NEO_KHZ800);
-  bool _buzzerEnabled = true;
+  uint8_t _buzzerLevel = 3;
   uint8_t _remainingBeeps = 0;
   uint16_t _beepMs = 0;
   uint16_t _gapMs = 0;
