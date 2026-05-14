@@ -58,6 +58,9 @@ private:
   void commitSettingsDraft(SettingsStore &settings);
   void keepSelectionVisible();
   void keepProfileSelectionVisible();
+  void noteActivity(uint32_t now);
+  void wakeDisplay(uint32_t now);
+  void sleepDisplay();
 
   Adafruit_SSD1306 _display;
   Screen _screen = Screen::Home;
@@ -69,6 +72,8 @@ private:
   uint8_t _profileEditIndex = 0;
   SettingsData _draftSettings{};
   bool _draftActive = false;
+  bool _displaySleeping = false;
   uint32_t _knownSettingsRevision = 0;
   uint32_t _lastDrawMs = 0;
+  uint32_t _lastActivityMs = 0;
 };

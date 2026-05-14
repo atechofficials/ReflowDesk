@@ -15,7 +15,8 @@
 
 namespace {
 constexpr uint32_t SETTINGS_MAGIC = 0x52465031UL; // RFP1
-constexpr uint16_t SETTINGS_VERSION = 4;
+constexpr uint16_t SETTINGS_VERSION = 5;
+constexpr uint16_t SETTINGS_LEGACY_VERSION_4 = 4;
 constexpr uint16_t SETTINGS_LEGACY_VERSION_3 = 3;
 constexpr uint16_t SETTINGS_LEGACY_VERSION_2 = 2;
 constexpr uint16_t SETTINGS_LEGACY_VERSION_1 = 1;
@@ -165,6 +166,7 @@ SettingsData SettingsStore::defaults() {
   settings.kiX100 = 6;
   settings.kdX100 = 2000;
   settings.ledBrightness = 45;
+  settings.oledSleepTimeoutSeconds = normalizeOledSleepTimeoutSeconds(Timing::OLED_SLEEP_DEFAULT_SECONDS);
   settings.crc = expectedCrc(settings);
   return settings;
 }
@@ -205,6 +207,7 @@ void SettingsStore::validate() {
   _data.ledBrightness = clampValue<uint8_t>(_data.ledBrightness, 0, 100);
   _data.ledBrightness = static_cast<uint8_t>(((_data.ledBrightness + 2) / 5) * 5);
   _data.ledBrightness = clampValue<uint8_t>(_data.ledBrightness, 0, 100);
+  _data.oledSleepTimeoutSeconds = normalizeOledSleepTimeoutSeconds(_data.oledSleepTimeoutSeconds);
   _data.crc = expectedCrc(_data);
 }
 
@@ -232,7 +235,8 @@ bool SettingsStore::load() {
 #endif
     return false;
   }
-  if (candidate.magic == SETTINGS_MAGIC && candidate.version == SETTINGS_LEGACY_VERSION_3 &&
+  if (candidate.magic == SETTINGS_MAGIC &&
+      (candidate.version == SETTINGS_LEGACY_VERSION_4 || candidate.version == SETTINGS_LEGACY_VERSION_3) &&
       candidate.length == sizeof(SettingsData)) {
     uint16_t expected = expectedCrc(candidate);
     if (candidate.crc != expected) {
@@ -245,10 +249,17 @@ bool SettingsStore::load() {
       return false;
     }
     _data = candidate;
-    _data.buzzerLevel = _data.buzzerLevel ? 3 : 0;
+    if (candidate.version == SETTINGS_LEGACY_VERSION_3) {
+      _data.buzzerLevel = _data.buzzerLevel ? 3 : 0;
+    }
+    if (_data.oledSleepTimeoutSeconds == 0) {
+      _data.oledSleepTimeoutSeconds = normalizeOledSleepTimeoutSeconds(Timing::OLED_SLEEP_DEFAULT_SECONDS);
+    }
     validate();
 #if REFLOW_DEBUG
-    Serial.println(F("NVS v3 settings migrated to buzzer level"));
+    Serial.println(candidate.version == SETTINGS_LEGACY_VERSION_4
+                       ? F("NVS v4 settings migrated to OLED sleep timeout")
+                       : F("NVS v3 settings migrated to buzzer level and OLED sleep timeout"));
 #endif
     return true;
   }
@@ -335,6 +346,7 @@ bool SettingsStore::loadLegacy() {
   _data.kiX100 = legacy.kiX100;
   _data.kdX100 = legacy.kdX100;
   _data.ledBrightness = legacy.ledBrightness;
+  _data.oledSleepTimeoutSeconds = normalizeOledSleepTimeoutSeconds(Timing::OLED_SLEEP_DEFAULT_SECONDS);
   validate();
 #if REFLOW_DEBUG
   Serial.println(F("NVS legacy settings migrated to profile 1"));
@@ -556,5 +568,40 @@ const char *SettingsStore::coolingProfileName(uint8_t profile) {
     case COOLING_PROFILE_NORMAL:
     default:
       return "Normal";
+  }
+}
+
+uint16_t SettingsStore::normalizeOledSleepTimeoutSeconds(uint16_t seconds) {
+  static const uint16_t options[] = {15, 30, 60, 120, 300, 600, 1800};
+  uint16_t best = options[0];
+  uint16_t bestDistance = seconds > best ? seconds - best : best - seconds;
+  for (uint8_t i = 1; i < sizeof(options) / sizeof(options[0]); ++i) {
+    uint16_t distance = seconds > options[i] ? seconds - options[i] : options[i] - seconds;
+    if (distance < bestDistance) {
+      best = options[i];
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+const char *SettingsStore::oledSleepTimeoutLabel(uint16_t seconds) {
+  switch (normalizeOledSleepTimeoutSeconds(seconds)) {
+    case 15:
+      return "15s";
+    case 30:
+      return "30s";
+    case 60:
+      return "1m";
+    case 120:
+      return "2m";
+    case 300:
+      return "5m";
+    case 600:
+      return "10m";
+    case 1800:
+      return "30m";
+    default:
+      return "2m";
   }
 }

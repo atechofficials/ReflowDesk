@@ -412,6 +412,10 @@ void ReflowWebServer::handleSettingsPut() {
     int ledBrightness = clampLocal<int>(doc["ledBrightness"].as<int>(), 0, 100);
     candidate.ledBrightness = clampLocal<int>(((ledBrightness + 2) / 5) * 5, 0, 100);
   }
+  if (doc["oledSleepTimeoutSeconds"].is<int>()) {
+    candidate.oledSleepTimeoutSeconds =
+        SettingsStore::normalizeOledSleepTimeoutSeconds(doc["oledSleepTimeoutSeconds"].as<int>());
+  }
   if (doc["kp"].is<float>()) {
     candidate.kpX100 = clampI16(static_cast<int>(doc["kp"].as<float>() * 100.0f + 0.5f), 0, 3000);
   }
@@ -961,6 +965,7 @@ void ReflowWebServer::addSettingsJson(JsonObject obj, const SettingsData &data) 
   obj["buzzerLevel"] = data.buzzerLevel;
   obj["buzzerEnabled"] = data.buzzerLevel != 0;
   obj["ledBrightness"] = data.ledBrightness;
+  obj["oledSleepTimeoutSeconds"] = data.oledSleepTimeoutSeconds;
   obj["kp"] = SettingsStore::kp(data);
   obj["ki"] = SettingsStore::ki(data);
   obj["kd"] = SettingsStore::kd(data);

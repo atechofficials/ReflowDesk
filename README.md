@@ -10,7 +10,7 @@ ReflowDesk is a small desktop SMD reflow soldering hot plate designed for makers
 
 The project is currently in active development. The first hardware revision, **ReflowDesk AT-MK1**, is available as early hardware manufacturing files for prototype validation.
 
-Current firmware version: **v0.5.7**.
+Current firmware version: **v0.6.0**.
 
 ---
 
@@ -52,6 +52,7 @@ ReflowDesk is intended to sit on a workbench and provide a controlled heating su
   - Silent gradual cooling
 - OLED GUI text auto-scroll for long focused labels and values.
 - Settings UI layout that adapts labels and values to the available 128x64 display space.
+- Configurable OLED display auto-sleep during inactivity, with rotary-encoder wake behavior.
 - Cooling fan support with speed control and fan status monitoring.
 - ReflowDesk AT-MK1 motherboard cooling fan support with independent PWM/tach monitoring.
 - Ambient and motherboard NTC temperature sensing support on AT-MK1 hardware.
@@ -73,6 +74,7 @@ ReflowDesk is intended to sit on a workbench and provide a controlled heating su
 | v0.4.0 | Added four stored solder paste reflow profiles, JSON profile provisioning from LittleFS, on-device profile editing, version-3 settings migration from legacy global curve settings, smooth auto-scrolling OLED text, adaptive settings/profile editor layout, settings cursor reset on menu entry, ESP32-S3 Pico development target fixes, and 16 MB / 4 MB OTA development partition tables. |
 | v0.5.4 | Added the ESP32-S3 hosted ReflowDesk Web Interface with WiFiManager onboarding, local PIN authentication, REST APIs, WebSocket telemetry/events, live Chart.js reflow graphs, web reflow controls, synchronized settings/profile edits, profile renaming, web OTA firmware upload, device reboot/factory reset controls, route persistence, hardware-originated settings change toasts, safer emergency-stop lockouts, stage-target notifications, and ambient NTC transient filtering. |
 | v0.5.7 | Refined the Web Interface with PIN change/re-lock behavior, light/dark theme switching, themed sidebar and control styling, per-card settings save actions, configurable setup AP credentials, static safety action button colors, improved OTA card details, LED brightness and buzzer level sliders, and OLED WiFi setup portal IP display. Updated settings storage to version 4 for buzzer level and LED brightness behavior. |
+| v0.6.0 | Added configurable OLED display auto-sleep with selectable inactivity timeouts, OLED and Web Interface settings support, encoder-rotation wake behavior, sleeping-button lockout to prevent accidental saves/actions, safe wake routing back to the Settings page from nested editors, and display-awake protection during reflow, cooldown, and fault states. Updated settings storage to version 5 for OLED sleep timeout persistence. |
 
 ---
 
@@ -90,6 +92,7 @@ The Web Interface mirrors the same firmware state used by the OLED GUI:
 - Change the Web Interface PIN and sign in again after the interface re-locks.
 - Switch between local light and dark themes.
 - Adjust buzzer sound level and status LED brightness.
+- Adjust the OLED display auto-sleep timeout.
 - Change setup AP credentials used by future WiFiManager sessions.
 - Upload app-only PlatformIO `firmware.bin` images through web OTA when the hot plate is idle and safe.
 
@@ -99,9 +102,29 @@ The web console uses local assets stored under `data/` and does not require inte
 
 | Asset | Version |
 | --- | --- |
-| `data/index.html` | v1.2.4 |
-| `data/js/app.js` | v1.2.5 |
+| `data/index.html` | v1.2.5 |
+| `data/js/app.js` | v1.2.6 |
 | `data/css/style.css` | v1.1.6 |
+
+---
+
+## OLED Display Auto-Sleep
+
+Firmware v0.6.0 adds an OLED display auto-sleep mode to reduce display wear and avoid leaving the screen on when the device is idle. The default timeout is configured in `src/config.h` with `REFLOW_OLED_SLEEP_DEFAULT_SECONDS`, which is exposed internally as `Timing::OLED_SLEEP_DEFAULT_SECONDS`.
+
+The timeout can also be changed from the OLED settings menu and the Web Interface settings page. Supported timeout options are:
+
+- 15 seconds
+- 30 seconds
+- 1 minute
+- 2 minutes
+- 5 minutes
+- 10 minutes
+- 30 minutes
+
+The display may sleep from normal menus and nested settings pages after inactivity. Rotary encoder rotation wakes the OLED and resets the inactivity timer. The encoder push button is ignored while the display is asleep, preventing accidental setting saves or action starts. If sleep occurs inside an individual settings editor, unsaved draft values are discarded and the OLED returns to the main Settings page after wake.
+
+OLED sleep is disabled during active reflow, cooldown, and fault states so process and safety information remains visible.
 
 ---
 

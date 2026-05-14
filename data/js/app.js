@@ -1,5 +1,5 @@
 // JavaScript for ReflowDesk Web Interface
-// Version: 1.2.5
+// Version: 1.2.6
 // Github: https://github.com/atechofficials/ReflowDesk
 // Author: Mrinal @atechofficials
 // License: General Public License v3.0
@@ -488,6 +488,7 @@ function renderSettings() {
   syncRangePair("led-brightness-slider", "led-brightness", state.settings.ledBrightness, 0, 100, 5);
   const buzzerLevel = clamp(numberOr(state.settings.buzzerLevel, state.settings.buzzerEnabled ? 3 : 0), 0, 5);
   syncRangePair("buzzer-level", "buzzer-level-value", buzzerLevel, 0, 5, 1);
+  $("oled-sleep-timeout").value = String(state.settings.oledSleepTimeoutSeconds || 120);
   $("pid-kp").value = Number(state.settings.kp).toFixed(2);
   $("pid-ki").value = Number(state.settings.ki).toFixed(2);
   $("pid-kd").value = Number(state.settings.kd).toFixed(2);
@@ -808,6 +809,7 @@ async function saveSettings() {
     safetyCutoffC: Number($("safety-cutoff").value),
     ledBrightness,
     buzzerLevel,
+    oledSleepTimeoutSeconds: Number($("oled-sleep-timeout").value),
     kp: Number($("pid-kp").value),
     ki: Number($("pid-ki").value),
     kd: Number($("pid-kd").value),

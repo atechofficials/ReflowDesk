@@ -8,7 +8,7 @@
 #include "ui.h"
 
 namespace {
-constexpr uint8_t SETTINGS_COUNT = 11;
+constexpr uint8_t SETTINGS_COUNT = 12;
 constexpr uint8_t SETTINGS_VISIBLE = 5;
 constexpr uint8_t PROFILE_SETTINGS_COUNT = 10;
 constexpr uint8_t PROFILE_SETTINGS_VISIBLE = 5;
@@ -21,6 +21,7 @@ enum SettingIndex : uint8_t {
   IDX_SAFE_TOUCH,
   IDX_SAFETY_CUTOFF,
   IDX_BUZZER,
+  IDX_OLED_SLEEP,
   IDX_KP,
   IDX_KI,
   IDX_KD,
@@ -75,11 +76,13 @@ bool UiManager::begin() {
   _display.println();
   _display.println(F("Initializing..."));
   _display.display();
+  _lastActivityMs = millis();
   return true;
 }
 
 void UiManager::showStatus(const __FlashStringHelper *title, const __FlashStringHelper *line1,
                            const __FlashStringHelper *line2) {
+  wakeDisplay(millis());
   _display.clearDisplay();
   _display.setTextColor(SSD1306_WHITE);
   _display.setTextSize(1);
@@ -96,6 +99,7 @@ void UiManager::showStatus(const __FlashStringHelper *title, const __FlashString
 }
 
 void UiManager::showStatus(const char *title, const char *line1, const char *line2) {
+  wakeDisplay(millis());
   _display.clearDisplay();
   _display.setTextColor(SSD1306_WHITE);
   _display.setTextSize(1);
@@ -127,6 +131,7 @@ void UiManager::syncSettingsRevision(const SettingsStore &settings) {
   if (_draftActive) {
     beginSettingsDraft(settings.data());
   }
+  wakeDisplay(millis());
 }
 
 void UiManager::handleInput(const InputEvent &event, SettingsStore &settings, ReflowController &reflow,
@@ -134,6 +139,14 @@ void UiManager::handleInput(const InputEvent &event, SettingsStore &settings, Re
   if (event.rotation == 0 && !event.click) {
     return;
   }
+  uint32_t now = millis();
+  if (_displaySleeping) {
+    if (event.rotation != 0) {
+      wakeDisplay(now);
+    }
+    return;
+  }
+  noteActivity(now);
   if (event.rotation != 0 || event.click) {
     alerts.beep(35);
   }
@@ -145,7 +158,6 @@ void UiManager::handleInput(const InputEvent &event, SettingsStore &settings, Re
     return;
   }
 
-  uint32_t now = millis();
   const SettingsData &current = settings.data();
   if (_screen != Screen::Home && (reflow.state() != ReflowState::Idle || reflow.cooldownLocked(current, sample, now))) {
     _screen = Screen::Home;
@@ -284,6 +296,30 @@ void UiManager::handleInput(const InputEvent &event, SettingsStore &settings, Re
 void UiManager::draw(uint32_t now, const SettingsStore &settings, const ReflowController &reflow,
                      const HeaterController &heater, const FanController &fan, const TemperatureSample &sample,
                      const FanController *boardFan) {
+  const uint32_t uiNow = millis();
+  const bool sleepAllowed = reflow.state() == ReflowState::Idle && !reflow.cooldownLocked(settings.data(), sample, now) &&
+                            !reflow.isFaultLike();
+  if (!sleepAllowed) {
+    if (_displaySleeping) {
+      wakeDisplay(uiNow);
+    }
+    if (reflow.state() != ReflowState::Idle || reflow.cooldownLocked(settings.data(), sample, now) ||
+        reflow.isFaultLike()) {
+      noteActivity(uiNow);
+    }
+  } else if (!_displaySleeping) {
+    uint32_t timeoutMs = static_cast<uint32_t>(settings.data().oledSleepTimeoutSeconds) * 1000UL;
+    if (timeoutMs > 0 && uiNow - _lastActivityMs >= timeoutMs) {
+      if (_draftActive) {
+        beginSettingsDraft(settings.data());
+      }
+      sleepDisplay();
+      return;
+    }
+  }
+  if (_displaySleeping) {
+    return;
+  }
   if (now - _lastDrawMs < Timing::DISPLAY_MS) {
     return;
   }
@@ -612,8 +648,8 @@ void UiManager::drawTextWindow(const char *text, int16_t x, int16_t y, uint8_t w
 
 const char *UiManager::settingLabel(uint8_t index) const {
   static const char *const labels[] = {
-      "Reflow Profile", "Edit Reflow Profile", "Safe C", "Cutoff C", "Buzzer", "Kp", "Ki", "Kd", "Reset", "About",
-      "Back"};
+      "Reflow Profile", "Edit Reflow Profile", "Safe C", "Cutoff C", "Buzzer", "OLED Sleep", "Kp", "Ki", "Kd",
+      "Reset", "About", "Back"};
   return labels[index];
 }
 
@@ -640,6 +676,9 @@ void UiManager::settingValueText(const SettingsData &settings, uint8_t index, ch
       break;
     case IDX_BUZZER:
       snprintf(buffer, length, "%u", static_cast<unsigned>(settings.buzzerLevel));
+      break;
+    case IDX_OLED_SLEEP:
+      snprintf(buffer, length, "%s", SettingsStore::oledSleepTimeoutLabel(settings.oledSleepTimeoutSeconds));
       break;
     case IDX_KP:
       dtostrf(SettingsStore::kp(settings), 0, 2, buffer);
@@ -724,6 +763,21 @@ void UiManager::adjustSetting(SettingsData &settings, int8_t delta, uint8_t inde
     case IDX_BUZZER:
       settings.buzzerLevel = clampLocal<int>(static_cast<int>(settings.buzzerLevel) + delta, 0, 5);
       break;
+    case IDX_OLED_SLEEP: {
+      static const uint16_t options[] = {15, 30, 60, 120, 300, 600, 1800};
+      uint16_t normalized = SettingsStore::normalizeOledSleepTimeoutSeconds(settings.oledSleepTimeoutSeconds);
+      uint8_t currentIndex = 0;
+      for (uint8_t i = 0; i < sizeof(options) / sizeof(options[0]); ++i) {
+        if (options[i] == normalized) {
+          currentIndex = i;
+          break;
+        }
+      }
+      int next = static_cast<int>(currentIndex) + delta;
+      next = clampLocal<int>(next, 0, static_cast<int>((sizeof(options) / sizeof(options[0])) - 1));
+      settings.oledSleepTimeoutSeconds = options[next];
+      break;
+    }
     case IDX_KP:
       settings.kpX100 = clampLocal<int16_t>(settings.kpX100 + delta * 10, 0, 3000);
       break;
@@ -734,6 +788,30 @@ void UiManager::adjustSetting(SettingsData &settings, int8_t delta, uint8_t inde
       settings.kdX100 = clampLocal<int16_t>(settings.kdX100 + delta * 100, 0, 20000);
       break;
   }
+}
+
+void UiManager::noteActivity(uint32_t now) {
+  _lastActivityMs = now;
+}
+
+void UiManager::wakeDisplay(uint32_t now) {
+  if (_displaySleeping) {
+    _display.ssd1306_command(SSD1306_DISPLAYON);
+    _displaySleeping = false;
+    _lastDrawMs = 0;
+  }
+  noteActivity(now);
+}
+
+void UiManager::sleepDisplay() {
+  if (_displaySleeping) {
+    return;
+  }
+  if (_screen != Screen::Home && _screen != Screen::Settings) {
+    _screen = Screen::Settings;
+  }
+  _display.ssd1306_command(SSD1306_DISPLAYOFF);
+  _displaySleeping = true;
 }
 
 void UiManager::adjustProfileSetting(SettingsData &settings, int8_t delta, uint8_t index) {
@@ -809,6 +887,7 @@ void UiManager::commitSettingsDraft(SettingsStore &settings) {
   settings.save();
   _knownSettingsRevision = settings.revision();
   beginSettingsDraft(settings.data());
+  wakeDisplay(millis());
 }
 
 void UiManager::keepSelectionVisible() {

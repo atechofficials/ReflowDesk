@@ -1,5 +1,5 @@
 <!-- ReflowDesk Web Interface -->
-<!-- Version: 1.2.4 -->
+<!-- Version: 1.2.5 -->
 <!-- Github: https://github.com/atechofficials/ReflowDesk -->
 <!-- Author: Mrinal @atechofficials -->
 <!-- License: General Public License v3.0 -->
@@ -291,6 +291,17 @@
                   <input id="buzzer-level" type="range" min="0" max="5" step="1">
                   <output id="buzzer-level-value">3</output>
                 </div>
+              </label>
+              <label>OLED Sleep Timeout
+                <select id="oled-sleep-timeout">
+                  <option value="15">15 seconds</option>
+                  <option value="30">30 seconds</option>
+                  <option value="60">1 minute</option>
+                  <option value="120">2 minutes</option>
+                  <option value="300">5 minutes</option>
+                  <option value="600">10 minutes</option>
+                  <option value="1800">30 minutes</option>
+                </select>
               </label>
             </div>
           </section>

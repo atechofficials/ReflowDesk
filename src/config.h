@@ -9,7 +9,7 @@
 
 #include <Arduino.h>
 
-#define FW_VERSION "0.5.7"
+#define FW_VERSION "0.6.0"
 
 // Hardware selection
 // PlatformIO environments select the target with build flags. AT-MK1 is the default
@@ -52,6 +52,10 @@
 
 #ifndef REFLOW_WEB_SETUP_AP_PASSWORD
 #define REFLOW_WEB_SETUP_AP_PASSWORD "ReflowDesk@2037"
+#endif
+
+#ifndef REFLOW_OLED_SLEEP_DEFAULT_SECONDS
+#define REFLOW_OLED_SLEEP_DEFAULT_SECONDS 120
 #endif
 
 static_assert(sizeof(REFLOW_WEB_SETUP_AP_PASSWORD) >= 9 && sizeof(REFLOW_WEB_SETUP_AP_PASSWORD) <= 64,
@@ -240,6 +244,7 @@ constexpr uint16_t SSR_WINDOW_MS = 2000;
 constexpr uint16_t BUTTON_DEBOUNCE_MS = 40;
 constexpr uint32_t HEATER_RESPONSE_CHECK_MS = 45000;
 constexpr uint32_t FORCED_COOLDOWN_MS = 120000;
+constexpr uint16_t OLED_SLEEP_DEFAULT_SECONDS = REFLOW_OLED_SLEEP_DEFAULT_SECONDS;
 }
 
 namespace Limits {

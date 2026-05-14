@@ -29,6 +29,7 @@ ReflowDesk is a desktop SMD reflow soldering hot plate controller. The current f
 - ReflowDesk AT-MK1 motherboard cooling fan PWM control and tachometer feedback.
 - ReflowDesk AT-MK1 dual NTC behavior: ambient NTC for PID compensation and motherboard NTC for ReflowDesk enclosure cooling.
 - Configurable buzzer sound level and status LED brightness alerts.
+- Configurable OLED display auto-sleep with rotary-encoder wake behavior.
 - NVS-based settings storage with save-skipping for unchanged settings.
 - Smooth OLED auto-scroll for long focused text and adaptive settings row layout.
 - OLED/Web Interface synchronization for settings, profile changes, process state, telemetry, and event toasts.
@@ -219,6 +220,8 @@ Do not assume KiCad source files are present in the repository. Hardware documen
 - Keep settings validation strict. Stored settings should be clamped to safe ranges before use.
 - Preserve NVS flash wear protection by avoiding unnecessary writes when settings have not changed.
 - Keep OLED text readable on a 128x64 display. Long focused labels or values may scroll, but stable rows should use available space before relying on scrolling.
+- Keep OLED auto-sleep conservative and predictable. The display should not sleep during active reflow, cooldown, or fault states, and rotary encoder button presses must be ignored while the display is asleep.
+- When OLED sleep occurs inside a nested settings/editor screen, discard unsaved draft values and wake back to the main Settings page instead of applying an unconfirmed edit.
 - Keep reflow profile names display-only on device unless a proper text-entry UI is added.
 - When changing profile JSON schema or defaults, update the files in `data/profiles/`, settings validation, migration behavior, and README notes together.
 - Preserve legacy settings migration when changing `SettingsData`; older global curve settings should continue to migrate into Profile-1 when possible.
@@ -282,6 +285,14 @@ When adding or changing feedback controls:
 - Keep buzzer level in the 0 to 5 range, where 0 means muted.
 - Keep LED brightness in the 0 to 100 range with 5-point increments, where 0 means the status LED is off.
 - Keep OLED numeric controls and Web Interface sliders synchronized through the same `SettingsData` fields.
+
+When adding or changing OLED sleep behavior:
+
+- Keep the default timeout configurable through `REFLOW_OLED_SLEEP_DEFAULT_SECONDS` in `src/config.h`.
+- Keep supported user timeout options limited to 15s, 30s, 1m, 2m, 5m, 10m, and 30m unless the OLED and UX behavior are retested.
+- Treat rotary encoder rotation and active button clicks as user activity while the display is awake.
+- Use rotary encoder rotation only as the wake action while the display is asleep; sleeping button clicks should not mutate UI drafts, save settings, or start actions.
+- Preserve OLED and Web Interface synchronization for `oledSleepTimeoutSeconds`.
 
 When adding or changing profile fields:
 

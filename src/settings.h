@@ -50,7 +50,7 @@ struct SettingsData {
   int16_t kpX100;
   int16_t kiX100;
   int16_t kdX100;
-  uint16_t reserved2;
+  uint16_t oledSleepTimeoutSeconds;
   uint16_t crc;
 } __attribute__((packed));
 
@@ -80,6 +80,8 @@ public:
   static float ki(const SettingsData &settings) { return settings.kiX100 / 100.0f; }
   static float kd(const SettingsData &settings) { return settings.kdX100 / 100.0f; }
   static const char *coolingProfileName(uint8_t profile);
+  static uint16_t normalizeOledSleepTimeoutSeconds(uint16_t seconds);
+  static const char *oledSleepTimeoutLabel(uint16_t seconds);
 
 private:
   bool load();
