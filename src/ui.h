@@ -61,6 +61,8 @@ private:
   void noteActivity(uint32_t now);
   void wakeDisplay(uint32_t now);
   void sleepDisplay();
+  void applyDisplayBrightness(uint8_t percent);
+  void drawControlsLocked();
 
   Adafruit_SSD1306 _display;
   Screen _screen = Screen::Home;
@@ -73,6 +75,9 @@ private:
   SettingsData _draftSettings{};
   bool _draftActive = false;
   bool _displaySleeping = false;
+  bool _forcedDisplayOff = false;
+  bool _wasControlsLocked = false;
+  uint8_t _appliedBrightness = 0;
   uint32_t _knownSettingsRevision = 0;
   uint32_t _lastDrawMs = 0;
   uint32_t _lastActivityMs = 0;

@@ -8,7 +8,7 @@
 #include "ui.h"
 
 namespace {
-constexpr uint8_t SETTINGS_COUNT = 12;
+constexpr uint8_t SETTINGS_COUNT = 14;
 constexpr uint8_t SETTINGS_VISIBLE = 5;
 constexpr uint8_t PROFILE_SETTINGS_COUNT = 10;
 constexpr uint8_t PROFILE_SETTINGS_VISIBLE = 5;
@@ -21,6 +21,8 @@ enum SettingIndex : uint8_t {
   IDX_SAFE_TOUCH,
   IDX_SAFETY_CUTOFF,
   IDX_BUZZER,
+  IDX_LED_BRIGHTNESS,
+  IDX_OLED_BRIGHTNESS,
   IDX_OLED_SLEEP,
   IDX_KP,
   IDX_KI,
@@ -58,6 +60,34 @@ void printTempValue(Adafruit_SSD1306 &display, float value, bool ok, uint8_t dec
     display.print(F("--.-C"));
   }
 }
+
+#if REFLOW_DEBUG
+void printSettingsSaveLine(const __FlashStringHelper *source, const SettingsData &data) {
+  const ReflowProfile &profile = SettingsStore::activeProfile(data);
+  Serial.print(F("EV settings source="));
+  Serial.print(source);
+  Serial.print(F(" profile=P"));
+  Serial.print(data.selectedProfileIndex + 1);
+  Serial.print(F(" name=\""));
+  Serial.print(profile.name);
+  Serial.print(F("\" safe="));
+  Serial.print(data.safeTouchC);
+  Serial.print(F(" cutoff="));
+  Serial.print(data.safetyCutoffC);
+  Serial.print(F(" buz="));
+  Serial.print(data.buzzerLevel);
+  Serial.print(F(" led="));
+  Serial.print(data.ledBrightness);
+  Serial.print(F(" oled="));
+  Serial.print(data.oledBrightness);
+  Serial.print(F(" sleep="));
+  Serial.print(data.oledSleepTimeoutSeconds);
+  Serial.print(F("s lock="));
+  Serial.print(data.deviceControlsLocked ? F("on") : F("off"));
+  Serial.print(F(" oledOff="));
+  Serial.println(data.oledForcedOff ? F("on") : F("off"));
+}
+#endif
 }
 
 UiManager::UiManager(TwoWire &wire)
@@ -77,6 +107,7 @@ bool UiManager::begin() {
   _display.println(F("Initializing..."));
   _display.display();
   _lastActivityMs = millis();
+  applyDisplayBrightness(100);
   return true;
 }
 
@@ -139,6 +170,9 @@ void UiManager::handleInput(const InputEvent &event, SettingsStore &settings, Re
   if (event.rotation == 0 && !event.click) {
     return;
   }
+  if (settings.data().deviceControlsLocked) {
+    return;
+  }
   uint32_t now = millis();
   if (_displaySleeping) {
     if (event.rotation != 0) {
@@ -152,6 +186,10 @@ void UiManager::handleInput(const InputEvent &event, SettingsStore &settings, Re
   }
 
   if (reflow.isHeatingState() && event.click) {
+#if REFLOW_DEBUG
+    Serial.print(F("EV oled cmd=abort stage="));
+    Serial.println(reflow.stateName());
+#endif
     reflow.abort();
     _screen = Screen::Home;
     _homeSelection = 0;
@@ -169,6 +207,9 @@ void UiManager::handleInput(const InputEvent &event, SettingsStore &settings, Re
       if (reflow.isFaultLike()) {
         _homeSelection = 0;
         if (event.click && reflow.canAcknowledge(current, sample, now)) {
+#if REFLOW_DEBUG
+          Serial.println(F("EV oled cmd=ack"));
+#endif
           reflow.acknowledge(current, sample);
         }
         break;
@@ -183,6 +224,14 @@ void UiManager::handleInput(const InputEvent &event, SettingsStore &settings, Re
       if (event.click) {
         if (_homeSelection == 0) {
           if (reflow.canStart(current, sample)) {
+#if REFLOW_DEBUG
+            const ReflowProfile &profile = SettingsStore::activeProfile(current);
+            Serial.print(F("EV oled cmd=start profile=P"));
+            Serial.print(current.selectedProfileIndex + 1);
+            Serial.print(F(" name=\""));
+            Serial.print(profile.name);
+            Serial.println(F("\""));
+#endif
             reflow.start(settings.data(), sample);
           }
         } else {
@@ -297,18 +346,67 @@ void UiManager::draw(uint32_t now, const SettingsStore &settings, const ReflowCo
                      const HeaterController &heater, const FanController &fan, const TemperatureSample &sample,
                      const FanController *boardFan) {
   const uint32_t uiNow = millis();
-  const bool sleepAllowed = reflow.state() == ReflowState::Idle && !reflow.cooldownLocked(settings.data(), sample, now) &&
+  const SettingsData &currentSettings = settings.data();
+  const bool controlsLocked = currentSettings.deviceControlsLocked != 0;
+  if (controlsLocked && !_wasControlsLocked) {
+    _wasControlsLocked = true;
+    _draftActive = false;
+  } else if (!controlsLocked && _wasControlsLocked) {
+    _wasControlsLocked = false;
+    _draftActive = false;
+    _screen = Screen::Home;
+    _homeSelection = 0;
+    _settingsSelection = 0;
+    _settingsTop = 0;
+    _profileSelection = 0;
+    _profileTop = 0;
+    _lastDrawMs = 0;
+    wakeDisplay(uiNow);
+  }
+
+  if (controlsLocked && currentSettings.oledForcedOff) {
+    if (!_displaySleeping || !_forcedDisplayOff) {
+      _display.ssd1306_command(SSD1306_DISPLAYOFF);
+      _displaySleeping = true;
+      _forcedDisplayOff = true;
+    }
+    return;
+  }
+  if (_forcedDisplayOff) {
+    _forcedDisplayOff = false;
+    wakeDisplay(uiNow);
+  }
+  if (controlsLocked) {
+    if (_displaySleeping) {
+      wakeDisplay(uiNow);
+    }
+    noteActivity(uiNow);
+    applyDisplayBrightness(currentSettings.oledBrightness);
+    if (now - _lastDrawMs < Timing::DISPLAY_MS) {
+      return;
+    }
+    _lastDrawMs = now;
+    _display.clearDisplay();
+    _display.setTextSize(1);
+    _display.setTextColor(SSD1306_WHITE);
+    drawControlsLocked();
+    _display.display();
+    return;
+  }
+
+  applyDisplayBrightness(currentSettings.oledBrightness);
+  const bool sleepAllowed = reflow.state() == ReflowState::Idle && !reflow.cooldownLocked(currentSettings, sample, now) &&
                             !reflow.isFaultLike();
   if (!sleepAllowed) {
     if (_displaySleeping) {
       wakeDisplay(uiNow);
     }
-    if (reflow.state() != ReflowState::Idle || reflow.cooldownLocked(settings.data(), sample, now) ||
+    if (reflow.state() != ReflowState::Idle || reflow.cooldownLocked(currentSettings, sample, now) ||
         reflow.isFaultLike()) {
       noteActivity(uiNow);
     }
   } else if (!_displaySleeping) {
-    uint32_t timeoutMs = static_cast<uint32_t>(settings.data().oledSleepTimeoutSeconds) * 1000UL;
+    uint32_t timeoutMs = static_cast<uint32_t>(currentSettings.oledSleepTimeoutSeconds) * 1000UL;
     if (timeoutMs > 0 && uiNow - _lastActivityMs >= timeoutMs) {
       if (_draftActive) {
         beginSettingsDraft(settings.data());
@@ -324,7 +422,7 @@ void UiManager::draw(uint32_t now, const SettingsStore &settings, const ReflowCo
     return;
   }
   _lastDrawMs = now;
-  if (_screen != Screen::Home && (reflow.state() != ReflowState::Idle || reflow.cooldownLocked(settings.data(), sample, now))) {
+  if (_screen != Screen::Home && (reflow.state() != ReflowState::Idle || reflow.cooldownLocked(currentSettings, sample, now))) {
     _screen = Screen::Home;
     _homeSelection = 0;
   }
@@ -648,8 +746,8 @@ void UiManager::drawTextWindow(const char *text, int16_t x, int16_t y, uint8_t w
 
 const char *UiManager::settingLabel(uint8_t index) const {
   static const char *const labels[] = {
-      "Reflow Profile", "Edit Reflow Profile", "Safe C", "Cutoff C", "Buzzer", "OLED Sleep", "Kp", "Ki", "Kd",
-      "Reset", "About", "Back"};
+      "Reflow Profile", "Edit Reflow Profile", "Safe C", "Cutoff C", "Buzzer", "LED Bright", "OLED Bright",
+      "OLED Sleep", "Kp", "Ki", "Kd", "Reset", "About", "Back"};
   return labels[index];
 }
 
@@ -676,6 +774,12 @@ void UiManager::settingValueText(const SettingsData &settings, uint8_t index, ch
       break;
     case IDX_BUZZER:
       snprintf(buffer, length, "%u", static_cast<unsigned>(settings.buzzerLevel));
+      break;
+    case IDX_LED_BRIGHTNESS:
+      snprintf(buffer, length, "%u%%", static_cast<unsigned>(settings.ledBrightness));
+      break;
+    case IDX_OLED_BRIGHTNESS:
+      snprintf(buffer, length, "%u%%", static_cast<unsigned>(settings.oledBrightness));
       break;
     case IDX_OLED_SLEEP:
       snprintf(buffer, length, "%s", SettingsStore::oledSleepTimeoutLabel(settings.oledSleepTimeoutSeconds));
@@ -763,6 +867,20 @@ void UiManager::adjustSetting(SettingsData &settings, int8_t delta, uint8_t inde
     case IDX_BUZZER:
       settings.buzzerLevel = clampLocal<int>(static_cast<int>(settings.buzzerLevel) + delta, 0, 5);
       break;
+    case IDX_LED_BRIGHTNESS: {
+      uint8_t current = clampLocal<uint8_t>(settings.ledBrightness, 0, 100);
+      current = static_cast<uint8_t>(((current + 2) / 5) * 5);
+      settings.ledBrightness = clampLocal<int>(static_cast<int>(current) + delta * 5, 0, 100);
+      break;
+    }
+    case IDX_OLED_BRIGHTNESS: {
+      uint8_t current = SettingsStore::normalizeOledBrightness(settings.oledBrightness);
+      settings.oledBrightness =
+          SettingsStore::normalizeOledBrightness(static_cast<uint8_t>(clampLocal<int>(
+              static_cast<int>(current) + delta * Limits::OLED_BRIGHTNESS_STEP_PERCENT,
+              Limits::OLED_BRIGHTNESS_MIN_PERCENT, Limits::OLED_BRIGHTNESS_MAX_PERCENT)));
+      break;
+    }
     case IDX_OLED_SLEEP: {
       static const uint16_t options[] = {15, 30, 60, 120, 300, 600, 1800};
       uint16_t normalized = SettingsStore::normalizeOledSleepTimeoutSeconds(settings.oledSleepTimeoutSeconds);
@@ -798,7 +916,11 @@ void UiManager::wakeDisplay(uint32_t now) {
   if (_displaySleeping) {
     _display.ssd1306_command(SSD1306_DISPLAYON);
     _displaySleeping = false;
+    _forcedDisplayOff = false;
     _lastDrawMs = 0;
+#if REFLOW_DEBUG
+    Serial.println(F("EV oled wake"));
+#endif
   }
   noteActivity(now);
 }
@@ -812,6 +934,37 @@ void UiManager::sleepDisplay() {
   }
   _display.ssd1306_command(SSD1306_DISPLAYOFF);
   _displaySleeping = true;
+#if REFLOW_DEBUG
+  Serial.println(F("EV oled sleep"));
+#endif
+}
+
+void UiManager::applyDisplayBrightness(uint8_t percent) {
+  uint8_t normalized = SettingsStore::normalizeOledBrightness(percent);
+  if (_appliedBrightness == normalized) {
+    return;
+  }
+  uint8_t contrast = static_cast<uint8_t>((static_cast<uint16_t>(normalized) * 255U) / 100U);
+  _display.ssd1306_command(SSD1306_SETCONTRAST);
+  _display.ssd1306_command(contrast);
+  _appliedBrightness = normalized;
+}
+
+void UiManager::drawControlsLocked() {
+  _display.setCursor(0, 0);
+  _display.println(F("Device Controls"));
+
+  _display.setCursor(0, 16);
+  _display.println(F("locked by Web"));
+
+  _display.setCursor(0, 28);
+  _display.println(F("Interface."));
+
+  _display.setCursor(0, 44);
+  _display.println(F("Unlock from"));
+
+  _display.setCursor(0, 56);
+  _display.println(F("Web UI."));
 }
 
 void UiManager::adjustProfileSetting(SettingsData &settings, int8_t delta, uint8_t index) {
@@ -887,6 +1040,9 @@ void UiManager::commitSettingsDraft(SettingsStore &settings) {
   settings.save();
   _knownSettingsRevision = settings.revision();
   beginSettingsDraft(settings.data());
+#if REFLOW_DEBUG
+  printSettingsSaveLine(F("OLED"), settings.data());
+#endif
   wakeDisplay(millis());
 }
 

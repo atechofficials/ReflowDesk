@@ -1,5 +1,5 @@
 // JavaScript for ReflowDesk Web Interface
-// Version: 1.2.6
+// Version: 1.2.7
 // Github: https://github.com/atechofficials/ReflowDesk
 // Author: Mrinal @atechofficials
 // License: General Public License v3.0
@@ -488,12 +488,42 @@ function renderSettings() {
   syncRangePair("led-brightness-slider", "led-brightness", state.settings.ledBrightness, 0, 100, 5);
   const buzzerLevel = clamp(numberOr(state.settings.buzzerLevel, state.settings.buzzerEnabled ? 3 : 0), 0, 5);
   syncRangePair("buzzer-level", "buzzer-level-value", buzzerLevel, 0, 5, 1);
+  const oledBrightnessMin = numberOr(state.settings.oledBrightnessMin, 10);
+  const oledBrightnessMax = numberOr(state.settings.oledBrightnessMax, 100);
+  const oledBrightnessStep = numberOr(state.settings.oledBrightnessStep, 10);
+  const oledBrightnessSlider = $("oled-brightness-slider");
+  const oledBrightnessInput = $("oled-brightness");
+  oledBrightnessSlider.min = oledBrightnessMin;
+  oledBrightnessSlider.max = oledBrightnessMax;
+  oledBrightnessSlider.step = oledBrightnessStep;
+  oledBrightnessInput.min = oledBrightnessMin;
+  oledBrightnessInput.max = oledBrightnessMax;
+  oledBrightnessInput.step = oledBrightnessStep;
+  syncRangePair("oled-brightness-slider", "oled-brightness", state.settings.oledBrightness,
+    oledBrightnessMin, oledBrightnessMax, oledBrightnessStep);
   $("oled-sleep-timeout").value = String(state.settings.oledSleepTimeoutSeconds || 120);
+  $("device-controls-locked").checked = !!state.settings.deviceControlsLocked;
+  $("oled-force-off").checked = !!state.settings.oledForcedOff;
+  updateControlsLockVisibility();
   $("pid-kp").value = Number(state.settings.kp).toFixed(2);
   $("pid-ki").value = Number(state.settings.ki).toFixed(2);
   $("pid-kd").value = Number(state.settings.kd).toFixed(2);
   $("setup-ap-ssid").value = state.settings.setupApSsid || "";
   $("setup-ap-password").value = state.settings.setupApPassword || "";
+}
+
+function updateControlsLockVisibility() {
+  const lock = $("device-controls-locked");
+  const forceOff = $("oled-force-off");
+  const row = $("oled-force-off-row");
+  if (!lock || !forceOff || !row) return;
+  const enabled = lock.checked;
+  forceOff.disabled = !enabled;
+  if (!enabled) {
+    forceOff.checked = false;
+  }
+  row.hidden = !enabled;
+  row.classList.toggle("is-disabled", !enabled);
 }
 
 function renderRunControls() {
@@ -804,12 +834,21 @@ function applySavedSnapshot(result, preferredProfileIndex = state.currentProfile
 async function saveSettings() {
   const ledBrightness = syncRangePair("led-brightness-slider", "led-brightness", $("led-brightness").value, 0, 100, 5);
   const buzzerLevel = syncRangePair("buzzer-level", "buzzer-level-value", $("buzzer-level").value, 0, 5, 1);
+  const oledBrightnessMin = numberOr(state.settings?.oledBrightnessMin, 10);
+  const oledBrightnessMax = numberOr(state.settings?.oledBrightnessMax, 100);
+  const oledBrightnessStep = numberOr(state.settings?.oledBrightnessStep, 10);
+  const oledBrightness = syncRangePair("oled-brightness-slider", "oled-brightness", $("oled-brightness").value,
+    oledBrightnessMin, oledBrightnessMax, oledBrightnessStep);
+  const deviceControlsLocked = $("device-controls-locked").checked;
   const body = {
     safeTouchC: Number($("safe-touch").value),
     safetyCutoffC: Number($("safety-cutoff").value),
     ledBrightness,
     buzzerLevel,
+    oledBrightness,
     oledSleepTimeoutSeconds: Number($("oled-sleep-timeout").value),
+    deviceControlsLocked,
+    oledForcedOff: deviceControlsLocked && $("oled-force-off").checked,
     kp: Number($("pid-kp").value),
     ki: Number($("pid-ki").value),
     kd: Number($("pid-kd").value),
@@ -1005,6 +1044,28 @@ function bindEvents() {
   $("buzzer-level").addEventListener("input", event => {
     syncRangePair("buzzer-level", "buzzer-level-value", event.target.value, 0, 5, 1);
   });
+  $("oled-brightness-slider").addEventListener("input", event => {
+    const low = numberOr(state.settings?.oledBrightnessMin, 10);
+    const high = numberOr(state.settings?.oledBrightnessMax, 100);
+    const step = numberOr(state.settings?.oledBrightnessStep, 10);
+    syncRangePair("oled-brightness-slider", "oled-brightness", event.target.value, low, high, step);
+  });
+  $("oled-brightness").addEventListener("input", event => {
+    const low = numberOr(state.settings?.oledBrightnessMin, 10);
+    const high = numberOr(state.settings?.oledBrightnessMax, 100);
+    const step = numberOr(state.settings?.oledBrightnessStep, 10);
+    const next = quantize(event.target.value, low, high, step);
+    const slider = $("oled-brightness-slider");
+    slider.value = next;
+    setRangeVisual(slider);
+  });
+  $("oled-brightness").addEventListener("change", event => {
+    const low = numberOr(state.settings?.oledBrightnessMin, 10);
+    const high = numberOr(state.settings?.oledBrightnessMax, 100);
+    const step = numberOr(state.settings?.oledBrightnessStep, 10);
+    syncRangePair("oled-brightness-slider", "oled-brightness", event.target.value, low, high, step);
+  });
+  $("device-controls-locked").addEventListener("change", updateControlsLockVisibility);
   els.themeToggle.addEventListener("click", () => applyTheme(state.theme === "light" ? "dark" : "light"));
   $("save-profile-btn").addEventListener("click", () => saveProfile().catch(err => toast(err.message, "error")));
   $("ota-form").addEventListener("submit", uploadOta);

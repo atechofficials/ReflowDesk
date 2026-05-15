@@ -51,6 +51,36 @@ T clampLocal(T value, T low, T high) {
 bool bodyToJson(const String &body, JsonDocument &doc) {
   return !body.isEmpty() && deserializeJson(doc, body) == DeserializationError::Ok;
 }
+
+#if REFLOW_DEBUG
+void printSettingsSaveLine(const __FlashStringHelper *source, const char *message, const SettingsData &data) {
+  const ReflowProfile &profile = SettingsStore::activeProfile(data);
+  Serial.print(F("EV settings source="));
+  Serial.print(source);
+  Serial.print(F(" msg=\""));
+  Serial.print(message);
+  Serial.print(F("\" profile=P"));
+  Serial.print(data.selectedProfileIndex + 1);
+  Serial.print(F(" name=\""));
+  Serial.print(profile.name);
+  Serial.print(F("\" safe="));
+  Serial.print(data.safeTouchC);
+  Serial.print(F(" cutoff="));
+  Serial.print(data.safetyCutoffC);
+  Serial.print(F(" buz="));
+  Serial.print(data.buzzerLevel);
+  Serial.print(F(" led="));
+  Serial.print(data.ledBrightness);
+  Serial.print(F(" oled="));
+  Serial.print(data.oledBrightness);
+  Serial.print(F(" sleep="));
+  Serial.print(data.oledSleepTimeoutSeconds);
+  Serial.print(F("s lock="));
+  Serial.print(data.deviceControlsLocked ? F("on") : F("off"));
+  Serial.print(F(" oledOff="));
+  Serial.println(data.oledForcedOff ? F("on") : F("off"));
+}
+#endif
 }
 
 ReflowWebServer::ReflowWebServer()
@@ -416,6 +446,15 @@ void ReflowWebServer::handleSettingsPut() {
     candidate.oledSleepTimeoutSeconds =
         SettingsStore::normalizeOledSleepTimeoutSeconds(doc["oledSleepTimeoutSeconds"].as<int>());
   }
+  if (doc["oledBrightness"].is<int>()) {
+    candidate.oledBrightness = SettingsStore::normalizeOledBrightness(doc["oledBrightness"].as<int>());
+  }
+  if (doc["deviceControlsLocked"].is<bool>()) {
+    candidate.deviceControlsLocked = doc["deviceControlsLocked"].as<bool>() ? 1 : 0;
+  }
+  if (doc["oledForcedOff"].is<bool>()) {
+    candidate.oledForcedOff = doc["oledForcedOff"].as<bool>() ? 1 : 0;
+  }
   if (doc["kp"].is<float>()) {
     candidate.kpX100 = clampI16(static_cast<int>(doc["kp"].as<float>() * 100.0f + 0.5f), 0, 3000);
   }
@@ -455,6 +494,16 @@ void ReflowWebServer::handleSettingsPut() {
     sendError(500, "Failed to save setup AP password");
     return;
   }
+#if REFLOW_DEBUG
+  if (updateApName) {
+    Serial.print(F("EV web setupAp ssid=\""));
+    Serial.print(apName);
+    Serial.println(F("\""));
+  }
+  if (updateApPassword) {
+    Serial.println(F("EV web setupAp password=updated"));
+  }
+#endif
 
   applySettings(candidate, "Settings saved from web interface.");
 }
@@ -545,6 +594,15 @@ void ReflowWebServer::handleReflowStart() {
     sendError(409, "Reflow cannot start until sensors are healthy and plate is safe");
     return;
   }
+#if REFLOW_DEBUG
+  const SettingsData &activeSettings = _settings->data();
+  const ReflowProfile &profile = SettingsStore::activeProfile(activeSettings);
+  Serial.print(F("EV web cmd=start profile=P"));
+  Serial.print(activeSettings.selectedProfileIndex + 1);
+  Serial.print(F(" name=\""));
+  Serial.print(profile.name);
+  Serial.println(F("\""));
+#endif
   if (!_reflow->start(_settings->data(), sample)) {
     sendError(409, "Reflow start failed");
     return;
@@ -562,6 +620,10 @@ void ReflowWebServer::handleReflowAbort() {
     sendError(409, "Emergency stop is only available during an active reflow stage");
     return;
   }
+#if REFLOW_DEBUG
+  Serial.print(F("EV web cmd=abort stage="));
+  Serial.println(_reflow->stateName());
+#endif
   _reflow->abort();
   sendOk("Reflow aborted");
   broadcastTelemetry(millis(), true);
@@ -578,6 +640,9 @@ void ReflowWebServer::handleReflowAck() {
     sendError(409, "Fault cannot be acknowledged yet");
     return;
   }
+#if REFLOW_DEBUG
+  Serial.println(F("EV web cmd=ack"));
+#endif
   _reflow->acknowledge(_settings->data(), sample);
   sendOk("Fault acknowledged");
   broadcastTelemetry(now, true);
@@ -592,6 +657,9 @@ void ReflowWebServer::handleDeviceReboot() {
     sendError(409, "Reboot is locked until the plate is idle and safe to touch");
     return;
   }
+#if REFLOW_DEBUG
+  Serial.println(F("EV web cmd=reboot"));
+#endif
   sendOk("Rebooting");
   broadcastEvent("warning", "Device reboot requested from web interface.");
   _restartPending = true;
@@ -607,6 +675,9 @@ void ReflowWebServer::handleFactoryReset() {
     sendError(409, "Factory reset is locked until the plate is idle and safe to touch");
     return;
   }
+#if REFLOW_DEBUG
+  Serial.println(F("EV web cmd=factory-reset"));
+#endif
   _settings->resetDefaults();
   bool saved = _settings->save();
   _lastSettingsRevision = _settings->revision();
@@ -634,9 +705,15 @@ void ReflowWebServer::handleOtaFinish() {
   if (_otaOk) {
     sendOk("Firmware uploaded. Rebooting.");
     broadcastEvent("success", "OTA firmware upload complete. Rebooting.");
+#if REFLOW_DEBUG
+    Serial.println(F("EV web ota=ok reboot=pending"));
+#endif
     _restartPending = true;
     _restartAtMs = millis() + 1000;
   } else {
+#if REFLOW_DEBUG
+    Serial.println(F("EV web ota=failed"));
+#endif
     sendError(500, "OTA upload failed");
   }
   _otaActive = false;
@@ -657,6 +734,9 @@ void ReflowWebServer::handleOtaUpload() {
       _otaAuthorized = false;
       return;
     }
+#if REFLOW_DEBUG
+    Serial.println(F("EV web ota=start"));
+#endif
     broadcastEvent("info", "OTA firmware upload started.");
   } else if (upload.status == UPLOAD_FILE_WRITE) {
     if (_otaActive && Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
@@ -673,6 +753,9 @@ void ReflowWebServer::handleOtaUpload() {
     Update.abort();
     _otaActive = false;
     _otaOk = false;
+#if REFLOW_DEBUG
+    Serial.println(F("EV web ota=aborted"));
+#endif
   }
 }
 
@@ -867,6 +950,9 @@ void ReflowWebServer::applySettings(const SettingsData &candidate, const char *e
   _alerts->setBuzzerLevel(_settings->data().buzzerLevel);
   _alerts->setLedBrightness(_settings->data().ledBrightness);
   _lastSettingsRevision = _settings->revision();
+#if REFLOW_DEBUG
+  printSettingsSaveLine(F("Web"), eventMessage, _settings->data());
+#endif
   JsonDocument doc;
   doc["ok"] = true;
   doc["message"] = "Saved";
@@ -966,6 +1052,12 @@ void ReflowWebServer::addSettingsJson(JsonObject obj, const SettingsData &data) 
   obj["buzzerEnabled"] = data.buzzerLevel != 0;
   obj["ledBrightness"] = data.ledBrightness;
   obj["oledSleepTimeoutSeconds"] = data.oledSleepTimeoutSeconds;
+  obj["oledBrightness"] = data.oledBrightness;
+  obj["oledBrightnessMin"] = Limits::OLED_BRIGHTNESS_MIN_PERCENT;
+  obj["oledBrightnessMax"] = Limits::OLED_BRIGHTNESS_MAX_PERCENT;
+  obj["oledBrightnessStep"] = Limits::OLED_BRIGHTNESS_STEP_PERCENT;
+  obj["deviceControlsLocked"] = data.deviceControlsLocked != 0;
+  obj["oledForcedOff"] = data.oledForcedOff != 0;
   obj["kp"] = SettingsStore::kp(data);
   obj["ki"] = SettingsStore::ki(data);
   obj["kd"] = SettingsStore::kd(data);

@@ -112,6 +112,16 @@ void printSettingsLine(const SettingsData &data) {
   Serial.print(data.safetyCutoffC);
   Serial.print(F(" buzLvl="));
   Serial.print(data.buzzerLevel);
+  Serial.print(F(" led="));
+  Serial.print(data.ledBrightness);
+  Serial.print(F(" oled="));
+  Serial.print(data.oledBrightness);
+  Serial.print(F(" sleep="));
+  Serial.print(data.oledSleepTimeoutSeconds);
+  Serial.print(F("s lock="));
+  Serial.print(data.deviceControlsLocked ? F("on") : F("off"));
+  Serial.print(F(" oledOff="));
+  Serial.print(data.oledForcedOff ? F("on") : F("off"));
   Serial.print(F(" cool="));
   Serial.print(SettingsStore::coolingProfileName(profile.coolingProfile));
   Serial.print(F(" pid="));
@@ -132,6 +142,26 @@ void printStageLine(uint32_t now, const SettingsData &data) {
   Serial.print(F(" hold="));
   Serial.print(reflow.holdTargetSeconds(data));
   Serial.println();
+}
+
+const __FlashStringHelper *stateNameFor(ReflowState state) {
+  switch (state) {
+    case ReflowState::Idle:
+      return F("Idle");
+    case ReflowState::Preheat:
+      return F("Preheat");
+    case ReflowState::Soak:
+      return F("Soak");
+    case ReflowState::Reflow:
+      return F("Reflow");
+    case ReflowState::Cooling:
+      return F("Cooling");
+    case ReflowState::Fault:
+      return F("Fault");
+    case ReflowState::Aborted:
+      return F("Aborted");
+  }
+  return F("?");
 }
 
 void printEventLog(uint32_t now) {
@@ -162,11 +192,18 @@ void printEventLog(uint32_t now) {
     } else if (state == ReflowState::Soak || state == ReflowState::Reflow) {
       printStageLine(now, data);
     } else if (state == ReflowState::Cooling) {
-      Serial.println(F("EV finish cool"));
+      Serial.println(F("EV cooling start reason=profile-complete"));
     } else if (state == ReflowState::Aborted) {
-      Serial.println(F("EV abort h=off fan=100"));
+      Serial.println(F("EV abort state=entered h=off fan=100"));
     } else if (state == ReflowState::Idle && lastState == ReflowState::Cooling) {
-      Serial.println(F("EV idle safe"));
+      Serial.println(F("EV cooling done safe=ready"));
+    } else if (state == ReflowState::Idle && lastState == ReflowState::Aborted) {
+      Serial.println(F("EV abort cooldown done safe=ready"));
+    } else if (state == ReflowState::Idle && (lastState == ReflowState::Preheat || lastState == ReflowState::Soak ||
+                                             lastState == ReflowState::Reflow)) {
+      Serial.print(F("EV stop from="));
+      Serial.print(stateNameFor(lastState));
+      Serial.println(F(" reason=instant-safe-stop"));
     }
   }
 
@@ -292,13 +329,35 @@ void loop() {
   sensors.update(now);
 
   const TemperatureSample &sample = sensors.sample();
-  bool rotationLocked = reflow.isHeatingState() || reflow.state() == ReflowState::Cooling ||
+  bool controlsLocked = settings.data().deviceControlsLocked != 0;
+#if REFLOW_DEBUG
+  static bool controlsLockInitialized = false;
+  static bool lastControlsLocked = false;
+  static bool lastOledForcedOff = false;
+  bool oledForcedOff = settings.data().oledForcedOff != 0;
+  if (!controlsLockInitialized) {
+    controlsLockInitialized = true;
+    lastControlsLocked = controlsLocked;
+    lastOledForcedOff = oledForcedOff;
+  } else if (controlsLocked != lastControlsLocked || oledForcedOff != lastOledForcedOff) {
+    lastControlsLocked = controlsLocked;
+    lastOledForcedOff = oledForcedOff;
+    Serial.print(F("EV controls lock="));
+    Serial.print(controlsLocked ? F("on") : F("off"));
+    Serial.print(F(" oledOff="));
+    Serial.println(oledForcedOff ? F("on") : F("off"));
+  }
+#endif
+  bool rotationLocked = controlsLocked || reflow.isHeatingState() || reflow.state() == ReflowState::Cooling ||
                         reflow.cooldownLocked(settings.data(), sample, now) || reflow.isFaultLike();
   if (rotationLocked) {
     input.discardRotation();
   }
 
   InputEvent event = input.poll(now);
+  if (controlsLocked) {
+    event = {};
+  }
   ui.handleInput(event, settings, reflow, alerts, sample);
   ui.syncSettingsRevision(settings);
 

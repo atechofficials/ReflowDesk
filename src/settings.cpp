@@ -15,7 +15,8 @@
 
 namespace {
 constexpr uint32_t SETTINGS_MAGIC = 0x52465031UL; // RFP1
-constexpr uint16_t SETTINGS_VERSION = 5;
+constexpr uint16_t SETTINGS_VERSION = 6;
+constexpr uint16_t SETTINGS_LEGACY_VERSION_5 = 5;
 constexpr uint16_t SETTINGS_LEGACY_VERSION_4 = 4;
 constexpr uint16_t SETTINGS_LEGACY_VERSION_3 = 3;
 constexpr uint16_t SETTINGS_LEGACY_VERSION_2 = 2;
@@ -43,6 +44,24 @@ struct LegacySettingsData {
   int16_t kdX100;
   uint8_t ledBrightness;
   uint8_t reserved1;
+  uint16_t crc;
+} __attribute__((packed));
+
+struct SettingsDataV5 {
+  uint32_t magic;
+  uint16_t version;
+  uint16_t length;
+  uint8_t selectedProfileIndex;
+  uint8_t buzzerLevel;
+  uint8_t ledBrightness;
+  uint8_t reserved1;
+  ReflowProfile profiles[REFLOW_PROFILE_COUNT];
+  int16_t safeTouchC;
+  int16_t safetyCutoffC;
+  int16_t kpX100;
+  int16_t kiX100;
+  int16_t kdX100;
+  uint16_t oledSleepTimeoutSeconds;
   uint16_t crc;
 } __attribute__((packed));
 
@@ -167,6 +186,9 @@ SettingsData SettingsStore::defaults() {
   settings.kdX100 = 2000;
   settings.ledBrightness = 45;
   settings.oledSleepTimeoutSeconds = normalizeOledSleepTimeoutSeconds(Timing::OLED_SLEEP_DEFAULT_SECONDS);
+  settings.oledBrightness = normalizeOledBrightness(100);
+  settings.deviceControlsLocked = 0;
+  settings.oledForcedOff = 0;
   settings.crc = expectedCrc(settings);
   return settings;
 }
@@ -208,6 +230,9 @@ void SettingsStore::validate() {
   _data.ledBrightness = static_cast<uint8_t>(((_data.ledBrightness + 2) / 5) * 5);
   _data.ledBrightness = clampValue<uint8_t>(_data.ledBrightness, 0, 100);
   _data.oledSleepTimeoutSeconds = normalizeOledSleepTimeoutSeconds(_data.oledSleepTimeoutSeconds);
+  _data.oledBrightness = normalizeOledBrightness(_data.oledBrightness);
+  _data.deviceControlsLocked = _data.deviceControlsLocked ? 1 : 0;
+  _data.oledForcedOff = (_data.deviceControlsLocked && _data.oledForcedOff) ? 1 : 0;
   _data.crc = expectedCrc(_data);
 }
 
@@ -219,6 +244,70 @@ bool SettingsStore::load() {
 #endif
   if (storedLength == sizeof(LegacySettingsData)) {
     return loadLegacy();
+  }
+
+  if (storedLength == sizeof(SettingsDataV5)) {
+    SettingsDataV5 legacy{};
+    size_t read = _prefs.getBytes(SETTINGS_KEY, &legacy, sizeof(legacy));
+#if REFLOW_DEBUG
+    Serial.print(F("NVS v5 load read="));
+    Serial.print(read);
+    Serial.print(F("/"));
+    Serial.println(sizeof(legacy));
+#endif
+    if (read != sizeof(legacy)) {
+      return false;
+    }
+    bool supportedVersion = legacy.version == SETTINGS_LEGACY_VERSION_5 || legacy.version == SETTINGS_LEGACY_VERSION_4 ||
+                            legacy.version == SETTINGS_LEGACY_VERSION_3;
+    if (legacy.magic != SETTINGS_MAGIC || !supportedVersion || legacy.length != sizeof(SettingsDataV5)) {
+      return false;
+    }
+    uint16_t storedCrc = legacy.crc;
+    legacy.crc = 0;
+    uint16_t expected = crc16(reinterpret_cast<const uint8_t *>(&legacy), offsetof(SettingsDataV5, crc));
+    legacy.crc = storedCrc;
+    if (storedCrc != expected) {
+#if REFLOW_DEBUG
+      Serial.print(F("NVS v5 load reject: crc stored=0x"));
+      Serial.print(storedCrc, HEX);
+      Serial.print(F(" expected=0x"));
+      Serial.println(expected, HEX);
+#endif
+      return false;
+    }
+
+    _data = defaults();
+    _data.selectedProfileIndex = legacy.selectedProfileIndex;
+    _data.buzzerLevel = legacy.version == SETTINGS_LEGACY_VERSION_3 ? (legacy.buzzerLevel ? 3 : 0) : legacy.buzzerLevel;
+    _data.ledBrightness = legacy.ledBrightness;
+    memcpy(_data.profiles, legacy.profiles, sizeof(_data.profiles));
+    _data.safeTouchC = legacy.safeTouchC;
+    _data.safetyCutoffC = legacy.safetyCutoffC;
+    _data.kpX100 = legacy.kpX100;
+    _data.kiX100 = legacy.kiX100;
+    _data.kdX100 = legacy.kdX100;
+    _data.oledSleepTimeoutSeconds = legacy.oledSleepTimeoutSeconds == 0
+                                         ? normalizeOledSleepTimeoutSeconds(Timing::OLED_SLEEP_DEFAULT_SECONDS)
+                                         : legacy.oledSleepTimeoutSeconds;
+    _data.oledBrightness = normalizeOledBrightness(100);
+    _data.deviceControlsLocked = 0;
+    _data.oledForcedOff = 0;
+    validate();
+#if REFLOW_DEBUG
+    Serial.println(F("NVS settings migrated to v6 OLED brightness and web control lock"));
+#endif
+    return true;
+  }
+
+  if (storedLength != sizeof(SettingsData)) {
+#if REFLOW_DEBUG
+    Serial.print(F("NVS load reject: stored length "));
+    Serial.print(storedLength);
+    Serial.print(F(" expected "));
+    Serial.println(sizeof(SettingsData));
+#endif
+    return false;
   }
 
   SettingsData candidate{};
@@ -234,34 +323,6 @@ bool SettingsStore::load() {
     Serial.println(F("NVS load reject: read length"));
 #endif
     return false;
-  }
-  if (candidate.magic == SETTINGS_MAGIC &&
-      (candidate.version == SETTINGS_LEGACY_VERSION_4 || candidate.version == SETTINGS_LEGACY_VERSION_3) &&
-      candidate.length == sizeof(SettingsData)) {
-    uint16_t expected = expectedCrc(candidate);
-    if (candidate.crc != expected) {
-#if REFLOW_DEBUG
-      Serial.print(F("NVS v3 load reject: crc stored=0x"));
-      Serial.print(candidate.crc, HEX);
-      Serial.print(F(" expected=0x"));
-      Serial.println(expected, HEX);
-#endif
-      return false;
-    }
-    _data = candidate;
-    if (candidate.version == SETTINGS_LEGACY_VERSION_3) {
-      _data.buzzerLevel = _data.buzzerLevel ? 3 : 0;
-    }
-    if (_data.oledSleepTimeoutSeconds == 0) {
-      _data.oledSleepTimeoutSeconds = normalizeOledSleepTimeoutSeconds(Timing::OLED_SLEEP_DEFAULT_SECONDS);
-    }
-    validate();
-#if REFLOW_DEBUG
-    Serial.println(candidate.version == SETTINGS_LEGACY_VERSION_4
-                       ? F("NVS v4 settings migrated to OLED sleep timeout")
-                       : F("NVS v3 settings migrated to buzzer level and OLED sleep timeout"));
-#endif
-    return true;
   }
   if (candidate.magic != SETTINGS_MAGIC || candidate.version != SETTINGS_VERSION || candidate.length != sizeof(SettingsData)) {
 #if REFLOW_DEBUG
@@ -347,6 +408,9 @@ bool SettingsStore::loadLegacy() {
   _data.kdX100 = legacy.kdX100;
   _data.ledBrightness = legacy.ledBrightness;
   _data.oledSleepTimeoutSeconds = normalizeOledSleepTimeoutSeconds(Timing::OLED_SLEEP_DEFAULT_SECONDS);
+  _data.oledBrightness = normalizeOledBrightness(100);
+  _data.deviceControlsLocked = 0;
+  _data.oledForcedOff = 0;
   validate();
 #if REFLOW_DEBUG
   Serial.println(F("NVS legacy settings migrated to profile 1"));
@@ -583,6 +647,15 @@ uint16_t SettingsStore::normalizeOledSleepTimeoutSeconds(uint16_t seconds) {
     }
   }
   return best;
+}
+
+uint8_t SettingsStore::normalizeOledBrightness(uint8_t percent) {
+  percent = clampValue<uint8_t>(percent, Limits::OLED_BRIGHTNESS_MIN_PERCENT, Limits::OLED_BRIGHTNESS_MAX_PERCENT);
+  uint8_t step = Limits::OLED_BRIGHTNESS_STEP_PERCENT;
+  uint8_t offset = static_cast<uint8_t>(percent - Limits::OLED_BRIGHTNESS_MIN_PERCENT);
+  uint8_t roundedSteps = static_cast<uint8_t>((offset + (step / 2)) / step);
+  uint8_t normalized = static_cast<uint8_t>(Limits::OLED_BRIGHTNESS_MIN_PERCENT + roundedSteps * step);
+  return clampValue<uint8_t>(normalized, Limits::OLED_BRIGHTNESS_MIN_PERCENT, Limits::OLED_BRIGHTNESS_MAX_PERCENT);
 }
 
 const char *SettingsStore::oledSleepTimeoutLabel(uint16_t seconds) {

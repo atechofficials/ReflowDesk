@@ -1,5 +1,5 @@
 /* ReflowDesk Web Interface Styles
- * Version: 1.1.6
+ * Version: 1.1.7
  * Github: https://github.com/atechofficials/ReflowDesk
  * Author: Mrinal @atechofficials
  * License: General Public License v3.0
@@ -843,6 +843,55 @@ output {
   padding: 12px 13px;
   color: var(--amber);
   background: color-mix(in srgb, var(--amber) 16%, transparent);
+}
+
+.toggle-stack {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--soft);
+  cursor: pointer;
+}
+
+.check-row input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+
+.check-row input:focus,
+.check-row input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.check-row span {
+  display: grid;
+  gap: 4px;
+}
+
+.check-row small {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.check-row.is-disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.check-row.is-disabled input {
+  cursor: not-allowed;
 }
 
 .theme-toggle, .icon-btn {

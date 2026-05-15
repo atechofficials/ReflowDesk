@@ -9,7 +9,7 @@
 
 #include <Arduino.h>
 
-#define FW_VERSION "0.6.0"
+#define FW_VERSION "0.7.0"
 
 // Hardware selection
 // PlatformIO environments select the target with build flags. AT-MK1 is the default
@@ -58,8 +58,15 @@
 #define REFLOW_OLED_SLEEP_DEFAULT_SECONDS 120
 #endif
 
+#ifndef REFLOW_OLED_BRIGHTNESS_MAX_PERCENT
+#define REFLOW_OLED_BRIGHTNESS_MAX_PERCENT 100
+#endif
+
 static_assert(sizeof(REFLOW_WEB_SETUP_AP_PASSWORD) >= 9 && sizeof(REFLOW_WEB_SETUP_AP_PASSWORD) <= 64,
               "REFLOW_WEB_SETUP_AP_PASSWORD must be 8 to 63 characters for WPA2 setup AP security.");
+static_assert(REFLOW_OLED_BRIGHTNESS_MAX_PERCENT >= 10 && REFLOW_OLED_BRIGHTNESS_MAX_PERCENT <= 100 &&
+                  REFLOW_OLED_BRIGHTNESS_MAX_PERCENT % 10 == 0,
+              "REFLOW_OLED_BRIGHTNESS_MAX_PERCENT must be a 10..100 percent value in 10 percent steps.");
 
 #if defined(REFLOW_AT_MK1)
 #define DEVICE_NAME "ReflowDesk"
@@ -262,6 +269,9 @@ constexpr int16_t SAFETY_MIN_C = 220;
 constexpr int16_t SAFETY_MAX_C = 250;
 constexpr uint16_t STAGE_TIME_MIN_S = 20;
 constexpr uint16_t STAGE_TIME_MAX_S = 600;
+constexpr uint8_t OLED_BRIGHTNESS_MIN_PERCENT = 10;
+constexpr uint8_t OLED_BRIGHTNESS_MAX_PERCENT = REFLOW_OLED_BRIGHTNESS_MAX_PERCENT;
+constexpr uint8_t OLED_BRIGHTNESS_STEP_PERCENT = 10;
 }
 
 namespace BoardCooling {

@@ -10,7 +10,7 @@ ReflowDesk is a small desktop SMD reflow soldering hot plate designed for makers
 
 The project is currently in active development. The first hardware revision, **ReflowDesk AT-MK1**, is available as early hardware manufacturing files for prototype validation.
 
-Current firmware version: **v0.6.0**.
+Current firmware version: **v0.7.0**.
 
 ---
 
@@ -53,12 +53,16 @@ ReflowDesk is intended to sit on a workbench and provide a controlled heating su
 - OLED GUI text auto-scroll for long focused labels and values.
 - Settings UI layout that adapts labels and values to the available 128x64 display space.
 - Configurable OLED display auto-sleep during inactivity, with rotary-encoder wake behavior.
+- Configurable OLED display brightness with OLED GUI and Web Interface controls.
+- Web-controlled physical input lock for rotary encoder and push-button controls.
+- Optional Web Interface mode to keep the OLED display off while physical controls are locked.
 - Cooling fan support with speed control and fan status monitoring.
 - ReflowDesk AT-MK1 motherboard cooling fan support with independent PWM/tach monitoring.
 - Ambient and motherboard NTC temperature sensing support on AT-MK1 hardware.
-- Adjustable visual status indication with addressable RGB LED support.
+- Adjustable visual status indication with addressable RGB LED support and synced Status LED brightness controls from both the OLED GUI and Web Interface.
 - Configurable buzzer sound level for user alerts and process notifications.
 - Safety cutoff support for over-temperature and fault conditions.
+- Compact serial event logging for settings changes, OLED/Web commands, reflow start/stage/abort/cooldown events, faults, OTA, OLED sleep/wake, and physical-control lock events.
 - Designed to support AC and DC PTC heating element options.
 - Breadboard-friendly reference pinout resources for common ESP32 boards and project modules.
 - Hardware visual assets including project logos and PCB render images.
@@ -75,6 +79,7 @@ ReflowDesk is intended to sit on a workbench and provide a controlled heating su
 | v0.5.4 | Added the ESP32-S3 hosted ReflowDesk Web Interface with WiFiManager onboarding, local PIN authentication, REST APIs, WebSocket telemetry/events, live Chart.js reflow graphs, web reflow controls, synchronized settings/profile edits, profile renaming, web OTA firmware upload, device reboot/factory reset controls, route persistence, hardware-originated settings change toasts, safer emergency-stop lockouts, stage-target notifications, and ambient NTC transient filtering. |
 | v0.5.7 | Refined the Web Interface with PIN change/re-lock behavior, light/dark theme switching, themed sidebar and control styling, per-card settings save actions, configurable setup AP credentials, static safety action button colors, improved OTA card details, LED brightness and buzzer level sliders, and OLED WiFi setup portal IP display. Updated settings storage to version 4 for buzzer level and LED brightness behavior. |
 | v0.6.0 | Added configurable OLED display auto-sleep with selectable inactivity timeouts, OLED and Web Interface settings support, encoder-rotation wake behavior, sleeping-button lockout to prevent accidental saves/actions, safe wake routing back to the Settings page from nested editors, and display-awake protection during reflow, cooldown, and fault states. Updated settings storage to version 5 for OLED sleep timeout persistence. |
+| v0.7.0 | Added OLED brightness control, exposed Status LED brightness on the OLED settings UI, added Web Interface based device physical-control lock and optional OLED-off locked mode, improved the OLED locked-controls screen and unlock routing, refined Web Interface control styling, and expanded serial event logs for OLED/Web commands, settings sources, reflow/cooldown/abort events, OTA, reboot, factory reset, OLED sleep/wake, and control-lock transitions. Updated settings storage to version 6 for display/control-lock persistence. |
 
 ---
 
@@ -92,7 +97,9 @@ The Web Interface mirrors the same firmware state used by the OLED GUI:
 - Change the Web Interface PIN and sign in again after the interface re-locks.
 - Switch between local light and dark themes.
 - Adjust buzzer sound level and status LED brightness.
-- Adjust the OLED display auto-sleep timeout.
+- Adjust OLED display brightness and auto-sleep timeout.
+- Lock the physical rotary encoder controls when the device is being operated from the Web Interface.
+- Optionally turn the OLED display off while physical controls are locked for fully web-controlled operation.
 - Change setup AP credentials used by future WiFiManager sessions.
 - Upload app-only PlatformIO `firmware.bin` images through web OTA when the hot plate is idle and safe.
 
@@ -102,15 +109,15 @@ The web console uses local assets stored under `data/` and does not require inte
 
 | Asset | Version |
 | --- | --- |
-| `data/index.html` | v1.2.5 |
-| `data/js/app.js` | v1.2.6 |
-| `data/css/style.css` | v1.1.6 |
+| `data/index.html` | v1.2.6 |
+| `data/js/app.js` | v1.2.7 |
+| `data/css/style.css` | v1.1.7 |
 
 ---
 
-## OLED Display Auto-Sleep
+## OLED Display And Control Lock
 
-Firmware v0.6.0 adds an OLED display auto-sleep mode to reduce display wear and avoid leaving the screen on when the device is idle. The default timeout is configured in `src/config.h` with `REFLOW_OLED_SLEEP_DEFAULT_SECONDS`, which is exposed internally as `Timing::OLED_SLEEP_DEFAULT_SECONDS`.
+Firmware v0.6.0 added OLED display auto-sleep mode to reduce display wear and avoid leaving the screen on when the device is idle. The default timeout is configured in `src/config.h` with `REFLOW_OLED_SLEEP_DEFAULT_SECONDS`, which is exposed internally as `Timing::OLED_SLEEP_DEFAULT_SECONDS`.
 
 The timeout can also be changed from the OLED settings menu and the Web Interface settings page. Supported timeout options are:
 
@@ -125,6 +132,10 @@ The timeout can also be changed from the OLED settings menu and the Web Interfac
 The display may sleep from normal menus and nested settings pages after inactivity. Rotary encoder rotation wakes the OLED and resets the inactivity timer. The encoder push button is ignored while the display is asleep, preventing accidental setting saves or action starts. If sleep occurs inside an individual settings editor, unsaved draft values are discarded and the OLED returns to the main Settings page after wake.
 
 OLED sleep is disabled during active reflow, cooldown, and fault states so process and safety information remains visible.
+
+Firmware v0.7.0 adds OLED brightness control. OLED brightness can be adjusted from the OLED settings menu and the Web Interface settings page. The minimum user brightness is fixed at 10%, the maximum is configured in `src/config.h`, and the selectable values move in 10% steps.
+
+The Web Interface can also lock the physical rotary encoder and push button. When this lock is active, the OLED shows a locked-controls message and the device must be unlocked from the Web Interface. A second web-only option can keep the OLED display off while the controls are locked, including during active reflow, cooldown, and fault conditions. This mode is intended for bench setups where ReflowDesk is operated only from the browser.
 
 ---
 
@@ -237,6 +248,7 @@ ReflowDesk is not a finished production release yet. The project is currently fo
 - Testing ReflowDesk AT-MK1 motherboard temperature monitoring and motherboard cooling fan behavior.
 - Tuning solder paste reflow profiles against real paste and PCB thermal loads.
 - Refining the OLED and Web Interface user experience and safety behavior.
+- Refining web-only control workflows, OLED/display behavior, and serial diagnostics.
 - Preparing reliable build and validation documentation.
 
 ---

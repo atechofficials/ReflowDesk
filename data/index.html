@@ -1,5 +1,5 @@
 <!-- ReflowDesk Web Interface -->
-<!-- Version: 1.2.5 -->
+<!-- Version: 1.2.6 -->
 <!-- Github: https://github.com/atechofficials/ReflowDesk -->
 <!-- Author: Mrinal @atechofficials -->
 <!-- License: General Public License v3.0 -->
@@ -292,6 +292,21 @@
                   <output id="buzzer-level-value">3</output>
                 </div>
               </label>
+            </div>
+          </section>
+          <section class="panel settings-section oled-panel">
+            <div class="panel-head compact-head">
+              <h2>OLED Display</h2>
+              <button class="ghost-btn panel-save-btn" type="button" data-save-settings>Save OLED</button>
+            </div>
+            <p>Adjust OLED visibility and the idle sleep timeout used by the hardware display.</p>
+            <div class="form-grid">
+              <label class="range-label">OLED Brightness
+                <div class="range-row">
+                  <input id="oled-brightness-slider" type="range" min="10" max="100" step="10">
+                  <input id="oled-brightness" class="range-number" type="number" min="10" max="100" step="10">
+                </div>
+              </label>
               <label>OLED Sleep Timeout
                 <select id="oled-sleep-timeout">
                   <option value="15">15 seconds</option>
@@ -302,6 +317,29 @@
                   <option value="600">10 minutes</option>
                   <option value="1800">30 minutes</option>
                 </select>
+              </label>
+            </div>
+          </section>
+          <section class="panel settings-section controls-lock-panel">
+            <div class="panel-head compact-head">
+              <h2>Device Controls</h2>
+              <button class="ghost-btn panel-save-btn" type="button" data-save-settings>Save Controls</button>
+            </div>
+            <p>Lock the rotary encoder controls when ReflowDesk is being operated from the web interface.</p>
+            <div class="toggle-stack">
+              <label class="check-row">
+                <input id="device-controls-locked" type="checkbox">
+                <span>
+                  <strong>Lock physical controls</strong>
+                  <small>OLED shows a lock message and the rotary encoder cannot start, stop, or edit settings.</small>
+                </span>
+              </label>
+              <label class="check-row nested-lock-option" id="oled-force-off-row">
+                <input id="oled-force-off" type="checkbox">
+                <span>
+                  <strong>Turn OLED off while locked</strong>
+                  <small>Use the web interface as the only display, even during reflow, cooldown, or faults.</small>
+                </span>
               </label>
             </div>
           </section>

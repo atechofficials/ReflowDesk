@@ -28,12 +28,14 @@ ReflowDesk is a desktop SMD reflow soldering hot plate controller. The current f
 - Cooling fan PWM control, 12V fan power control, and tachometer feedback.
 - ReflowDesk AT-MK1 motherboard cooling fan PWM control and tachometer feedback.
 - ReflowDesk AT-MK1 dual NTC behavior: ambient NTC for PID compensation and motherboard NTC for ReflowDesk enclosure cooling.
-- Configurable buzzer sound level and status LED brightness alerts.
+- Configurable buzzer sound level, Status LED brightness, OLED brightness, and user alert behavior.
 - Configurable OLED display auto-sleep with rotary-encoder wake behavior.
+- Web-managed physical-controls lock for the rotary encoder and push button, with optional OLED-off web-only operation.
 - NVS-based settings storage with save-skipping for unchanged settings.
 - Smooth OLED auto-scroll for long focused text and adaptive settings row layout.
 - OLED/Web Interface synchronization for settings, profile changes, process state, telemetry, and event toasts.
-- Web settings cards with focused save actions for safety, feedback, PID, setup AP, and access changes.
+- Web settings cards with focused save actions for safety, feedback, OLED/display, device controls, PID, setup AP, and access changes.
+- Structured serial event logs for settings changes, OLED/Web commands, reflow process transitions, aborts, faults, OTA, reboot, factory reset, OLED sleep/wake, and physical-control lock transitions.
 - Hardware selection and pin assignment through `src/config.h`.
 
 The current hardware release includes Gerber packages and schematic PDFs for:
@@ -222,10 +224,13 @@ Do not assume KiCad source files are present in the repository. Hardware documen
 - Keep OLED text readable on a 128x64 display. Long focused labels or values may scroll, but stable rows should use available space before relying on scrolling.
 - Keep OLED auto-sleep conservative and predictable. The display should not sleep during active reflow, cooldown, or fault states, and rotary encoder button presses must be ignored while the display is asleep.
 - When OLED sleep occurs inside a nested settings/editor screen, discard unsaved draft values and wake back to the main Settings page instead of applying an unconfirmed edit.
+- Keep OLED brightness clamped to the range defined by `Limits::OLED_BRIGHTNESS_MIN_PERCENT`, `REFLOW_OLED_BRIGHTNESS_MAX_PERCENT`, and `Limits::OLED_BRIGHTNESS_STEP_PERCENT`.
+- Keep the Web Interface physical-controls lock authoritative. While locked, rotary encoder rotation and button input must not start, stop, or edit settings. When the lock is released, route the OLED UI back to the main menu instead of restoring a nested editor.
+- Treat the optional OLED-off locked mode as stronger than OLED auto-sleep. If enabled, the display should remain off while physical controls are locked, including during reflow, cooldown, and fault states.
 - Keep reflow profile names display-only on device unless a proper text-entry UI is added.
 - When changing profile JSON schema or defaults, update the files in `data/profiles/`, settings validation, migration behavior, and README notes together.
 - Preserve legacy settings migration when changing `SettingsData`; older global curve settings should continue to migrate into Profile-1 when possible.
-- Keep serial debug output useful for hardware validation, especially temperature, heater state, fan power, fan duty, and RPM.
+- Keep serial debug output useful for hardware validation, especially temperature, heater state, fan power, fan duty, RPM, settings source, OLED/Web commands, process transitions, faults, OTA, OLED sleep/wake, and control-lock changes. Prefer compact `EV ...` event lines over noisy repeated prose.
 
 ---
 
@@ -240,6 +245,7 @@ The Web Interface is served locally from LittleFS and shares the same live firmw
 - Keep WiFi setup AP credentials configurable through `src/config.h` and the Web Interface settings page.
 - Preserve local PIN authentication for protected API and WebSocket access.
 - When the Web PIN is changed, re-lock the browser session so the user must sign in with the new PIN.
+- Keep physical-controls lock and OLED-off locked mode synchronized through the same settings path as the OLED GUI. Web-only operation must not bypass reflow safety, cooldown, or fault handling.
 - Keep theme behavior local and deterministic. Theme-specific button, sidebar, input-focus, and slider colors should follow the documented ReflowDesk light/dark palette, while destructive/safety buttons keep their static warning colors.
 - Keep all web assets local under `data/`; do not introduce CDN dependencies for runtime UI behavior.
 - Update the asset version comments in `data/index.html`, `data/js/app.js`, and `data/css/style.css` when those files receive meaningful UI or behavior changes.
@@ -278,12 +284,13 @@ When adding a user setting:
 
 Settings should be understandable from the device UI without requiring a user to read the firmware.
 
-Reflow profile settings are grouped under profile slots instead of being shown as global stage values. Keep global settings limited to values that are truly device-wide, such as safety limits, buzzer sound level, LED brightness, and PID tuning.
+Reflow profile settings are grouped under profile slots instead of being shown as global stage values. Keep global settings limited to values that are truly device-wide, such as safety limits, buzzer sound level, Status LED brightness, OLED brightness/sleep behavior, physical-control lock state, and PID tuning.
 
 When adding or changing feedback controls:
 
 - Keep buzzer level in the 0 to 5 range, where 0 means muted.
 - Keep LED brightness in the 0 to 100 range with 5-point increments, where 0 means the status LED is off.
+- Keep OLED brightness in the configured 10 to 100 range with 10-point increments unless `REFLOW_OLED_BRIGHTNESS_MAX_PERCENT` changes the upper bound.
 - Keep OLED numeric controls and Web Interface sliders synchronized through the same `SettingsData` fields.
 
 When adding or changing OLED sleep behavior:
