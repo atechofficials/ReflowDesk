@@ -256,7 +256,7 @@ void printDebugLine(uint32_t now) {
   Serial.print(F(" h="));
   Serial.print(heater.outputOn() ? F("ON") : F("OFF"));
   Serial.print(F(" pin="));
-  Serial.print(heater.ssrPinHigh() ? F("H") : F("L"));
+  Serial.print(heater.ssrCommandedOn() ? F("H") : F("L"));
   Serial.print(F(" fan="));
   Serial.print(fan.speedPercent());
   Serial.print(F(" fp="));

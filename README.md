@@ -10,7 +10,7 @@ ReflowDesk is a small desktop SMD reflow soldering hot plate designed for makers
 
 The project is currently in active development. The first hardware revision, **ReflowDesk AT-MK1**, is available as early hardware manufacturing files for prototype validation.
 
-Current firmware version: **v0.7.0**.
+Current firmware version: **v0.8.0**.
 
 ---
 
@@ -62,6 +62,10 @@ ReflowDesk is intended to sit on a workbench and provide a controlled heating su
 - Adjustable visual status indication with addressable RGB LED support and synced Status LED brightness controls from both the OLED GUI and Web Interface.
 - Configurable buzzer sound level for user alerts and process notifications.
 - Safety cutoff support for over-temperature and fault conditions.
+- Time-proportional PID heater control for zero-cross SSR driven AC PTC heating elements.
+- Configurable SSR output polarity for active-low and active-high SSR modules.
+- Improved heater PID behavior with staged warm-up assist, derivative-on-measurement, conditional integral anti-windup, duty slew limiting, and per-window SSR duty latching.
+- Heater control limits tuned for practical 220VAC PTC hot plate behavior around the 220-230°C range.
 - Compact serial event logging for settings changes, OLED/Web commands, reflow start/stage/abort/cooldown events, faults, OTA, OLED sleep/wake, and physical-control lock events.
 - Designed to support AC and DC PTC heating element options.
 - Breadboard-friendly reference pinout resources for common ESP32 boards and project modules.
@@ -80,6 +84,7 @@ ReflowDesk is intended to sit on a workbench and provide a controlled heating su
 | v0.5.7 | Refined the Web Interface with PIN change/re-lock behavior, light/dark theme switching, themed sidebar and control styling, per-card settings save actions, configurable setup AP credentials, static safety action button colors, improved OTA card details, LED brightness and buzzer level sliders, and OLED WiFi setup portal IP display. Updated settings storage to version 4 for buzzer level and LED brightness behavior. |
 | v0.6.0 | Added configurable OLED display auto-sleep with selectable inactivity timeouts, OLED and Web Interface settings support, encoder-rotation wake behavior, sleeping-button lockout to prevent accidental saves/actions, safe wake routing back to the Settings page from nested editors, and display-awake protection during reflow, cooldown, and fault states. Updated settings storage to version 5 for OLED sleep timeout persistence. |
 | v0.7.0 | Added OLED brightness control, exposed Status LED brightness on the OLED settings UI, added Web Interface based device physical-control lock and optional OLED-off locked mode, improved the OLED locked-controls screen and unlock routing, refined Web Interface control styling, and expanded serial event logs for OLED/Web commands, settings sources, reflow/cooldown/abort events, OTA, reboot, factory reset, OLED sleep/wake, and control-lock transitions. Updated settings storage to version 6 for display/control-lock persistence. |
+| v0.8.0 | Improved AC PTC heater control and SSR handling. Added configurable active-low/active-high SSR output polarity, replaced ambiguous SSR pin-state reporting with logical SSR commanded-on reporting, refined PID heater control with staged warm-up assist, conditional anti-windup, duty slew limiting, per-window duty latching, sensor-invalid fail-safe shutdown paths, and heater limits better matched to the tested 220VAC PTC heating element behavior. Reflow testing showed improved heating response to a 215°C reflow stage target with reduced overshoot in soak/reflow stages. |
 
 ---
 
@@ -93,7 +98,7 @@ The Web Interface mirrors the same firmware state used by the OLED GUI:
 - Stop an active heating stage from the browser or physical input.
 - Edit global settings from either UI and keep the other UI synchronized.
 - Select, rename, and edit reflow profiles from the browser.
-- View live process telemetry, faults, fan state/RPM, SSR state/duty, stage timing, and safety status.
+- View live process telemetry, faults, fan state/RPM, logical SSR commanded state, SSR duty/window duty, stage timing, and safety status.
 - Change the Web Interface PIN and sign in again after the interface re-locks.
 - Switch between local light and dark themes.
 - Adjust buzzer sound level and status LED brightness.
@@ -109,9 +114,9 @@ The web console uses local assets stored under `data/` and does not require inte
 
 | Asset | Version |
 | --- | --- |
-| `data/index.html` | v1.2.6 |
+| `data/index.html` | v1.2.7 |
 | `data/js/app.js` | v1.2.7 |
-| `data/css/style.css` | v1.1.7 |
+| `data/css/style.css` | v1.1.8 |
 
 ---
 
@@ -136,6 +141,9 @@ OLED sleep is disabled during active reflow, cooldown, and fault states so proce
 Firmware v0.7.0 adds OLED brightness control. OLED brightness can be adjusted from the OLED settings menu and the Web Interface settings page. The minimum user brightness is fixed at 10%, the maximum is configured in `src/config.h`, and the selectable values move in 10% steps.
 
 The Web Interface can also lock the physical rotary encoder and push button. When this lock is active, the OLED shows a locked-controls message and the device must be unlocked from the Web Interface. A second web-only option can keep the OLED display off while the controls are locked, including during active reflow, cooldown, and fault conditions. This mode is intended for bench setups where ReflowDesk is operated only from the browser.
+
+Firmware v0.8.0 refines heater output reporting by using logical SSR commanded-on status instead of ambiguous raw GPIO-level naming. This keeps Web/OLED diagnostics clearer on both active-low and active-high SSR modules.
+
 
 ---
 
@@ -219,7 +227,7 @@ The `hardware/pinouts/` folder contains pinout diagrams for common ESP32 and ESP
 | --- | --- | --- |
 | 12VDC PTC Heating Element | Low-voltage DC hot plate build | Supported by hardware design |
 | 24VDC PTC Heating Element | Higher-power low-voltage DC hot plate build | Supported by hardware design |
-| 220VAC PTC Heating Element | AC-powered hot plate build | Supported by hardware design |
+| 220VAC PTC Heating Element | AC-powered hot plate build using time-proportional zero-cross SSR control | Supported by hardware design and tested in firmware v0.8.0 heater-control validation |
 
 ---
 
@@ -243,10 +251,10 @@ ReflowDesk is not a finished production release yet. The project is currently fo
 
 - Validating the ReflowDesk AT-MK1 Motherboard v1 PCB.
 - Validating the ReflowDesk AT-MK1 Daughterboard v1 PCB.
-- Testing AC and DC heater control behavior.
+- Testing AC and DC heater control behavior, including configurable SSR polarity and time-proportional AC SSR control.
 - Testing Hot Plate cooling fan control and RPM feedback.
 - Testing ReflowDesk AT-MK1 motherboard temperature monitoring and motherboard cooling fan behavior.
-- Tuning solder paste reflow profiles against real paste and PCB thermal loads.
+- Tuning solder paste reflow profiles against real paste, PCB thermal loads, and tested 220VAC PTC heater limits.
 - Refining the OLED and Web Interface user experience and safety behavior.
 - Refining web-only control workflows, OLED/display behavior, and serial diagnostics.
 - Preparing reliable build and validation documentation.

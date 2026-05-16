@@ -528,7 +528,7 @@ void UiManager::drawHome(const SettingsData &settings, const ReflowController &r
   _display.print(F(" "));
   _display.print(heater.dutyPercent(), 0);
   _display.print(F("% P:"));
-  _display.print(heater.ssrPinHigh() ? F("H") : F("L"));
+  _display.print(heater.ssrCommandedOn() ? F("H") : F("L"));
   _display.print(F(" F:"));
   _display.print(fan.speedPercent());
   _display.print(F("%"));

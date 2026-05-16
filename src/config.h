@@ -9,7 +9,7 @@
 
 #include <Arduino.h>
 
-#define FW_VERSION "0.7.0"
+#define FW_VERSION "0.8.0"
 
 // Hardware selection
 // PlatformIO environments select the target with build flags. AT-MK1 is the default
@@ -17,6 +17,10 @@
 // #define REFLOW_AT_MK1
 // #define FIREBEETLE2_ESP32E
 // #define ESP32_S3_PICO
+
+// PTC Heater Type Selection (Not implemented yet - for future use)
+// Set to 1 for DC PWM control of a PTC heater. Set to 0 for SSR control of an AC PTC heater.
+// #define REFLOW_HEATER_DC_PWM 1
 
 #if !defined(REFLOW_AT_MK1) && !defined(FIREBEETLE2_ESP32E) && !defined(ESP32_S3_PICO)
 #define REFLOW_AT_MK1
@@ -60,6 +64,21 @@
 
 #ifndef REFLOW_OLED_BRIGHTNESS_MAX_PERCENT
 #define REFLOW_OLED_BRIGHTNESS_MAX_PERCENT 100
+#endif
+
+// SSR output polarity configuration
+// 0 = Active-high SSR: MCU HIGH = SSR ON, MCU LOW = SSR OFF
+// 1 = Active-low SSR:  MCU LOW  = SSR ON, MCU HIGH = SSR OFF
+#ifndef REFLOW_SSR_ACTIVE_LOW
+#if defined(REFLOW_AT_MK1) || defined(ESP32_S3_PICO)
+#define REFLOW_SSR_ACTIVE_LOW 1
+#else
+#define REFLOW_SSR_ACTIVE_LOW 0
+#endif
+#endif
+
+#ifndef REFLOW_HEATER_DC_PWM
+#define REFLOW_HEATER_DC_PWM 0
 #endif
 
 static_assert(sizeof(REFLOW_WEB_SETUP_AP_PASSWORD) >= 9 && sizeof(REFLOW_WEB_SETUP_AP_PASSWORD) <= 64,
@@ -246,8 +265,10 @@ namespace Timing {
 constexpr uint16_t TEMP_READ_MS = 500;
 constexpr uint16_t AMBIENT_READ_MS = 1000;
 constexpr uint16_t DISPLAY_MS = 60;
+
 constexpr uint16_t CONTROL_MS = 500;
-constexpr uint16_t SSR_WINDOW_MS = 2000;
+constexpr uint16_t SSR_WINDOW_MS = 2000; // Good for a zero-cross SSR and 220VAC PTC heater
+
 constexpr uint16_t BUTTON_DEBOUNCE_MS = 40;
 constexpr uint32_t HEATER_RESPONSE_CHECK_MS = 45000;
 constexpr uint32_t FORCED_COOLDOWN_MS = 120000;
@@ -255,26 +276,65 @@ constexpr uint16_t OLED_SLEEP_DEFAULT_SECONDS = REFLOW_OLED_SLEEP_DEFAULT_SECOND
 }
 
 namespace Limits {
+
+// Reflow Profiles Limits/setting ranges
 constexpr int16_t PREHEAT_MIN_C = 50;
 constexpr int16_t PREHEAT_MAX_C = 180;
+
 constexpr int16_t SOAK_MIN_C = 120;
 constexpr int16_t SOAK_MAX_C = 210;
+
 constexpr int16_t REFLOW_MIN_C = 160;
-constexpr int16_t REFLOW_MAX_C = 245;
+constexpr int16_t REFLOW_MAX_C = 225; // maximum user-selectable target
+
 constexpr int16_t PROFILE_STAGE_GAP_C = 10;
 constexpr int16_t PROFILE_PREHEAT_SAFE_TOUCH_OFFSET_C = 15;
+
+// Hot Plate Safe to touch temp range
 constexpr int16_t SAFE_TOUCH_MIN_C = 35;
 constexpr int16_t SAFE_TOUCH_MAX_C = 50;
+
+// Hot Plate Safety temp cutoffs and limits
 constexpr int16_t SAFETY_MIN_C = 220;
-constexpr int16_t SAFETY_MAX_C = 250;
+constexpr int16_t SAFETY_MAX_C = 235; // emergency firmware cutoff
+
 constexpr uint16_t STAGE_TIME_MIN_S = 20;
 constexpr uint16_t STAGE_TIME_MAX_S = 600;
+
+// OLED brightness limits
 constexpr uint8_t OLED_BRIGHTNESS_MIN_PERCENT = 10;
 constexpr uint8_t OLED_BRIGHTNESS_MAX_PERCENT = REFLOW_OLED_BRIGHTNESS_MAX_PERCENT;
 constexpr uint8_t OLED_BRIGHTNESS_STEP_PERCENT = 10;
 }
 
+namespace HeaterTuning {
+constexpr bool SSR_ACTIVE_LOW = REFLOW_SSR_ACTIVE_LOW;
+
+constexpr float INTEGRAL_MIN = -600.0f;
+constexpr float INTEGRAL_MAX = 600.0f;
+
+constexpr float AMBIENT_BOOST_GAIN = 0.08f;
+constexpr float AMBIENT_BOOST_MAX = 8.0f;
+
+constexpr float OVERSHOOT_CUTOFF_C = 3.0f;
+
+constexpr float MIN_VALID_PLATE_C = -20.0f;
+constexpr float MAX_VALID_PLATE_C = Limits::SAFETY_MAX_C;
+
+constexpr float DUTY_MAX_STEP_PER_UPDATE = 25.0f;
+
+constexpr float WARMUP_ERROR_FAR_C = 50.0f;
+constexpr float WARMUP_ERROR_MID_C = 30.0f;
+constexpr float WARMUP_ERROR_NEAR_C = 15.0f;
+
+constexpr float WARMUP_DUTY_FAR_PERCENT = 95.0f;
+constexpr float WARMUP_DUTY_MID_PERCENT = 80.0f;
+constexpr float WARMUP_DUTY_NEAR_PERCENT = 50.0f;
+}
+
 namespace BoardCooling {
+
+// Motherboard cooling fan control thresholds and settings
 constexpr float FAN_OFF_C = 40.0f;
 constexpr float FAN_ON_C = 45.0f;
 constexpr float FAN_FULL_C = 65.0f;

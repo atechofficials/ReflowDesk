@@ -1,5 +1,5 @@
 /* ReflowDesk Web Interface Styles
- * Version: 1.1.7
+ * Version: 1.1.8
  * Github: https://github.com/atechofficials/ReflowDesk
  * Author: Mrinal @atechofficials
  * License: General Public License v3.0
@@ -140,8 +140,8 @@ button {
 }
 
 .brand-logo {
-  width: 54px;
-  height: 54px;
+  width: 64px;
+  height: 64px;
   object-fit: contain;
 }
 
@@ -307,8 +307,8 @@ button:disabled {
 }
 
 .sidebar-brand img {
-  width: 42px;
-  height: 42px;
+  width: 64px;
+  height: 64px;
   object-fit: contain;
 }
 

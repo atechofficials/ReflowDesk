@@ -21,7 +21,9 @@ ReflowDesk is a desktop SMD reflow soldering hot plate controller. The current f
 - Configurable setup AP credentials for future WiFiManager sessions.
 - Light and dark Web Interface themes served from local assets.
 - Web OTA upload for app-only PlatformIO `firmware.bin` images.
-- Heater control with time-windowed PID output.
+- Heater control with time-windowed PID output for SSR-driven AC PTC heaters and supported PTC heater configurations.
+- Configurable SSR output polarity for active-low and active-high SSR modules through `src/config.h`.
+- Improved heater-control behavior with staged warm-up assist, conditional integral anti-windup, per-window SSR duty latching, and duty slew limiting.
 - Four saved solder paste reflow profiles stored in NVS.
 - JSON-based reflow profile provisioning from LittleFS.
 - On-device editing of profile stage temperatures, stage times, and cooling behavior.
@@ -182,6 +184,16 @@ Pin assignments must stay inside the matching hardware block in `src/config.h`. 
 
 For `ReflowDesk AT-MK1`, the firmware uses ESP32-S3 pin assignments, an 8 MB OTA partition layout, a second NTC channel for motherboard temperature, and a second PWM fan channel for motherboard cooling. For `FireBeetle2 ESP32-E` development hardware, the firmware uses a 4 MB OTA partition layout and a single ADS1115 NTC channel for ambient temperature/PID compensation. The `ESP32_S3_PICO` target is for ESP32-S3 development boards and does not use the AT-MK1 second NTC or second PWM fan path.
 
+Heater-output behavior is also configured from `src/config.h`. Keep SSR polarity and heater-type options centralized there instead of hardcoding GPIO levels in `heater.cpp` or other modules. 
+
+For SSR-controlled AC heaters:
+
+- `REFLOW_SSR_ACTIVE_LOW` should describe the actual SSR input module polarity.
+- Active-low SSR modules must drive the heater ON when the GPIO is LOW and OFF when the GPIO is HIGH.
+- Active-high SSR modules must drive the heater ON when the GPIO is HIGH and OFF when the GPIO is LOW.
+- Firmware code should treat `_outputOn`, `outputOn()`, and `ssrCommandedOn()` as logical heater ON/OFF state, not as raw GPIO HIGH/LOW state.
+- Diagnostic code that checks the physical GPIO level should compare against the configured `SSR_DRIVER_ON_LEVEL`/`SSR_DRIVER_OFF_LEVEL` instead of assuming one polarity.
+
 Partition tables:
 
 | File | Intended Use |
@@ -219,6 +231,12 @@ Do not assume KiCad source files are present in the repository. Hardware documen
 - Keep AT-MK1 motherboard fan behavior independent from the hot-plate fan power switch. The motherboard fan is controlled by PWM and tach feedback only.
 - Keep motherboard NTC failure behavior configurable through `src/config.h`.
 - Use time-windowed heater control for PTC heating elements and SSR output. Do not replace this with high-frequency heater PWM unless the hardware is specifically redesigned for it.
+- For zero-cross AC SSR heater control, keep the heater output as slow time-proportional control using the configured SSR window. Do not use MCU high-frequency PWM for normal AC SSR operation.
+- Keep SSR polarity configurable. Do not assume that GPIO HIGH always means heater ON or that GPIO LOW always means heater OFF.
+- Keep logical heater state separate from electrical pin state. `_outputOn` should mean firmware-commanded heater ON/OFF, while GPIO HIGH/LOW should be derived from the configured SSR polarity.
+- Preserve PID anti-windup behavior, staged warm-up assist, duty slew limiting, and per-window duty latching unless a replacement is tested on real heater hardware.
+- Avoid aggressive forced duty near the target temperature. Warm-up assist may help far below target, but near the setpoint the PID loop should control the final approach.
+- Treat target overshoot cutoff and absolute safety cutoff as separate concepts. Normal PID behavior should not repeatedly hit the emergency safety cutoff.
 - Keep settings validation strict. Stored settings should be clamped to safe ranges before use.
 - Preserve NVS flash wear protection by avoiding unnecessary writes when settings have not changed.
 - Keep OLED text readable on a 128x64 display. Long focused labels or values may scroll, but stable rows should use available space before relying on scrolling.
@@ -231,6 +249,37 @@ Do not assume KiCad source files are present in the repository. Hardware documen
 - When changing profile JSON schema or defaults, update the files in `data/profiles/`, settings validation, migration behavior, and README notes together.
 - Preserve legacy settings migration when changing `SettingsData`; older global curve settings should continue to migrate into Profile-1 when possible.
 - Keep serial debug output useful for hardware validation, especially temperature, heater state, fan power, fan duty, RPM, settings source, OLED/Web commands, process transitions, faults, OTA, OLED sleep/wake, and control-lock changes. Prefer compact `EV ...` event lines over noisy repeated prose.
+
+---
+
+## Heater Control Validation
+
+Changes to `src/heater.cpp`, `src/heater.h`, heater-related settings, SSR polarity, PID behavior, or temperature limits require hardware-aware validation.
+
+When changing heater control, test and document:
+
+- SSR module polarity used during testing: active-low or active-high.
+- Heating element type: AC PTC through SSR, low-voltage DC PTC, or another controlled load.
+- Mains/heater voltage and approximate heater temperature capability.
+- Reflow target tested, especially high-temperature behavior above 200°C.
+- Whether preheat, soak, and reflow stages overshoot or undershoot their targets.
+- Whether the Web Interface/OLED GUI SSR state matches the actual commanded heater state.
+- Whether abort, fault, invalid sensor, and idle states force the heater output OFF.
+- Whether the heater stays OFF during boot/reset until firmware intentionally enables output.
+
+For AC zero-cross SSR testing, the expected control path is:
+
+```text
+PID output percent
+  -> time-proportional SSR duty
+  -> fixed SSR window
+  -> configured active-low/active-high GPIO level
+  -> SSR-controlled heater power
+```
+
+Do not report raw GPIO HIGH/LOW as heater ON/OFF unless the configured SSR polarity is also considered. Web UI/OLED GUI telemetry should report logical SSR/heater state.
+
+If changing `Limits::REFLOW_MAX_C`, `Limits::SAFETY_MAX_C`, warm-up assist thresholds, PID defaults, or heater response checks, include test notes showing that the selected values match the real heating element and do not encourage unsafe operation beyond the heater's practical capability.
 
 ---
 
@@ -286,6 +335,8 @@ Settings should be understandable from the device UI without requiring a user to
 
 Reflow profile settings are grouped under profile slots instead of being shown as global stage values. Keep global settings limited to values that are truly device-wide, such as safety limits, buzzer sound level, Status LED brightness, OLED brightness/sleep behavior, physical-control lock state, and PID tuning.
 
+Hardware-specific values such as SSR polarity, heater type selection, board pin maps, OLED brightness maximum, setup AP defaults, and low-level heater capability limits should remain in `src/config.h` unless they are deliberately exposed as validated runtime settings.
+
 When adding or changing feedback controls:
 
 - Keep buzzer level in the 0 to 5 range, where 0 means muted.
@@ -325,6 +376,8 @@ Hardware-related contributions should consider:
 - Wire gauge and connector current rating.
 - Hot-surface protection.
 - Safe default states during reset and boot.
+- External pull-up/pull-down requirements for SSR inputs, especially active-low SSR modules.
+- Whether the heater can accidentally turn ON while the MCU pin is floating, during bootloader entry, or before `pinMode()` is configured.
 - PCB manufacturer process limits for high-current and mains-voltage areas.
 
 If a change reduces safety margin, it should not be merged.
@@ -339,6 +392,8 @@ Before submitting a change:
 - Build affected development targets, such as `pio run -e development` or `pio run -e development2`, when touching shared firmware or partition files.
 - Build the filesystem image with `pio run -e at-mk1 -t buildfs` when changing files under `data/`.
 - Test relevant hardware behavior if the change touches IO, sensors, heater control, fan control, buzzer, or display behavior.
+- For heater-control changes, document SSR polarity, heater type, target temperature tested, observed overshoot, and whether the heater output stayed OFF during idle/fault/abort states.
+- For Web UI/OLED GUI telemetry changes, confirm that SSR/heater state reporting follows logical commanded state and does not confuse raw GPIO level with heater ON/OFF state.
 - Keep changes focused on one topic.
 - Update `docs/` when the change affects setup, hardware, calibration, fabrication, or operating behavior.
 - Update `hardware/README.md` when adding or replacing hardware release files.
@@ -356,6 +411,7 @@ When reporting a problem, include:
 - ESP32 board/module used.
 - PCB version or breadboard wiring used.
 - Heating element type.
+- SSR module type and polarity, if the issue involves heater control.
 - Power supply details.
 - Relevant serial debug output.
 - What you expected to happen.

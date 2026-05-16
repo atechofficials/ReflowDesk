@@ -1124,7 +1124,7 @@ void ReflowWebServer::addTelemetryJson(JsonObject obj, uint32_t now) const {
   JsonObject heater = obj["heater"].to<JsonObject>();
   heater["enabled"] = _heater->enabled();
   heater["outputOn"] = _heater->outputOn();
-  heater["ssrPinHigh"] = _heater->ssrPinHigh();
+  heater["ssrPinHigh"] = _heater->ssrCommandedOn();
   heater["dutyPercent"] = _heater->dutyPercent();
 
   JsonObject fan = obj["fan"].to<JsonObject>();
