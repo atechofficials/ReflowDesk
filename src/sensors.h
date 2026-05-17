@@ -18,16 +18,20 @@ struct TemperatureSample {
   float plateC = 0.0f;
   float ambientC = 25.0f;
   float boardC = 25.0f;
+
   bool plateOk = false;
   bool ambientOk = false;
   bool boardOk = false;
+  
   bool plateReadOnce = false;
   bool ambientReadOnce = false;
   bool boardReadOnce = false;
+  
   uint8_t plateStatus = 0;
   uint16_t plateRaw = 0;
-  uint16_t ambientAdc = 0;
-  uint16_t boardAdc = 0;
+
+  int16_t ambientAdc = 0;
+  int16_t boardAdc = 0;
 };
 
 class SensorManager {
@@ -42,10 +46,11 @@ private:
   void readPlate();
   void readAmbient();
   void readBoard();
-  bool ensureAmbientAdc();
-  void configureAmbientAdc();
-  void readThermistor(uint8_t channel, float &temperatureC, bool &ok, bool &readOnce, uint16_t &adcRaw);
+  bool ensureAdc();
+  void configureAdc();
+  void readThermistor(uint8_t channel, float &temperatureC, bool &ok, bool &readOnce, int16_t &adcRaw);
   float filterAmbientC(float measuredC);
+  float filterBoardC(float measuredC);
   float thermistorCelsius(float voltage, bool &ok) const;
 
   MAX6675 _plateThermo;
@@ -56,4 +61,10 @@ private:
   float _ambientFilteredC = 25.0f;
   bool _ambientFilterReady = false;
   bool _ambientAdcReady = false;
+  float _boardFilteredC = 25.0f;
+  bool _boardFilterReady = false;
+  uint8_t _ambientFailCount = 0;
+  float _lastGoodPlateC = 0.0f;
+  bool _hasLastGoodPlate = false;
+  uint8_t _plateSpikeCount = 0;
 };

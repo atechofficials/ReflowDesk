@@ -10,7 +10,7 @@ ReflowDesk is a small desktop SMD reflow soldering hot plate designed for makers
 
 The project is currently in active development. The first hardware revision, **ReflowDesk AT-MK1**, is available as early hardware manufacturing files for prototype validation.
 
-Current firmware version: **v0.8.0**.
+Current firmware version: **v0.8.1**.
 
 ---
 
@@ -59,7 +59,11 @@ ReflowDesk is intended to sit on a workbench and provide a controlled heating su
 - Cooling fan support with speed control and fan status monitoring.
 - ReflowDesk AT-MK1 motherboard cooling fan support with independent PWM/tach monitoring.
 - Ambient and motherboard NTC temperature sensing support on AT-MK1 hardware.
+- Improved temperature sensor validation for MAX6675 thermocouple and ADS1115 NTC readings.
+- Plate thermocouple spike rejection using last-known-good temperature handling.
+- Ambient NTC repeated-failure fallback behavior and filtered board NTC readings for smoother motherboard temperature monitoring.
 - Adjustable visual status indication with addressable RGB LED support and synced Status LED brightness controls from both the OLED GUI and Web Interface.
+- Configurable RGB Status LED color order through `RGB_LED_COLOR_ORDER` in `src/config.h` for boards using different NeoPixel color orders.
 - Configurable buzzer sound level for user alerts and process notifications.
 - Safety cutoff support for over-temperature and fault conditions.
 - Time-proportional PID heater control for zero-cross SSR driven AC PTC heating elements.
@@ -85,6 +89,7 @@ ReflowDesk is intended to sit on a workbench and provide a controlled heating su
 | v0.6.0 | Added configurable OLED display auto-sleep with selectable inactivity timeouts, OLED and Web Interface settings support, encoder-rotation wake behavior, sleeping-button lockout to prevent accidental saves/actions, safe wake routing back to the Settings page from nested editors, and display-awake protection during reflow, cooldown, and fault states. Updated settings storage to version 5 for OLED sleep timeout persistence. |
 | v0.7.0 | Added OLED brightness control, exposed Status LED brightness on the OLED settings UI, added Web Interface based device physical-control lock and optional OLED-off locked mode, improved the OLED locked-controls screen and unlock routing, refined Web Interface control styling, and expanded serial event logs for OLED/Web commands, settings sources, reflow/cooldown/abort events, OTA, reboot, factory reset, OLED sleep/wake, and control-lock transitions. Updated settings storage to version 6 for display/control-lock persistence. |
 | v0.8.0 | Improved AC PTC heater control and SSR handling. Added configurable active-low/active-high SSR output polarity, replaced ambiguous SSR pin-state reporting with logical SSR commanded-on reporting, refined PID heater control with staged warm-up assist, conditional anti-windup, duty slew limiting, per-window duty latching, sensor-invalid fail-safe shutdown paths, and heater limits better matched to the tested 220VAC PTC heating element behavior. Reflow testing showed improved heating response to a 215°C reflow stage target with reduced overshoot in soak/reflow stages. |
+| v0.8.1 | Improved temperature sensor reliability and validation. Added signed ADS1115 ADC reporting for NTC channels, shared ADC setup naming, configurable sensor validation/filtering limits, board NTC filtering, ambient NTC repeated-failure fallback behavior, MAX6675 plate-temperature validity checks, and thermocouple spike rejection using the last known good plate reading. Added configurable `RGB_LED_COLOR_ORDER` in `src/config.h` for RGB Status LED color-order compatibility across ESP32-S3 boards. Reflow testing with the updated sensor code completed successfully using the Sn63Pb37 leaded profile, with stable thermocouple status, stable ambient readings, and no false sensor fault observed. |
 
 ---
 
@@ -144,6 +149,17 @@ The Web Interface can also lock the physical rotary encoder and push button. Whe
 
 Firmware v0.8.0 refines heater output reporting by using logical SSR commanded-on status instead of ambiguous raw GPIO-level naming. This keeps Web/OLED diagnostics clearer on both active-low and active-high SSR modules.
 
+## Temperature Sensing And Validation
+
+Firmware v0.8.1 improves the temperature sensor layer used by the reflow controller and heater PID loop.
+
+The plate temperature is measured through the MAX6675 K-type thermocouple interface. Firmware v0.8.1 adds stricter plate temperature validity checks and thermocouple spike rejection using the last known good plate temperature. This helps reject isolated bad readings without allowing the heater controller to continue from clearly invalid thermocouple data.
+
+Ambient and motherboard temperature sensing use ADS1115-based NTC channels. The firmware now stores ADS1115 NTC raw readings as signed values for clearer diagnostics, uses shared ADC setup naming for ambient/board channels, filters the motherboard NTC reading, and resets the ambient filter after repeated ambient NTC failures. If ambient NTC readings repeatedly fail, the firmware falls back to a safe default ambient value for compensation behavior rather than letting stale filtered data appear fresh.
+
+Sensor tuning limits are kept in `src/config.h` so validation ranges and filtering behavior can be adjusted as the hardware is tested.
+
+Firmware v0.8.1 reflow validation completed successfully using the `Sn63Pb37 leaded` profile. The updated sensor code did not produce false MAX6675/NTC faults during the test run.
 
 ---
 
@@ -227,7 +243,7 @@ The `hardware/pinouts/` folder contains pinout diagrams for common ESP32 and ESP
 | --- | --- | --- |
 | 12VDC PTC Heating Element | Low-voltage DC hot plate build | Supported by hardware design |
 | 24VDC PTC Heating Element | Higher-power low-voltage DC hot plate build | Supported by hardware design |
-| 220VAC PTC Heating Element | AC-powered hot plate build using time-proportional zero-cross SSR control | Supported by hardware design and tested in firmware v0.8.0 heater-control validation |
+| 220VAC PTC Heating Element | AC-powered hot plate build using time-proportional zero-cross SSR control | Supported by hardware design and tested in firmware v0.8.x heater-control and sensor-validation runs |
 
 ---
 
@@ -253,7 +269,8 @@ ReflowDesk is not a finished production release yet. The project is currently fo
 - Validating the ReflowDesk AT-MK1 Daughterboard v1 PCB.
 - Testing AC and DC heater control behavior, including configurable SSR polarity and time-proportional AC SSR control.
 - Testing Hot Plate cooling fan control and RPM feedback.
-- Testing ReflowDesk AT-MK1 motherboard temperature monitoring and motherboard cooling fan behavior.
+- Testing ReflowDesk AT-MK1 motherboard temperature monitoring, filtered board NTC behavior, and motherboard cooling fan behavior.
+- Validating MAX6675 thermocouple and ADS1115 NTC reliability during full reflow cycles.
 - Tuning solder paste reflow profiles against real paste, PCB thermal loads, and tested 220VAC PTC heater limits.
 - Refining the OLED and Web Interface user experience and safety behavior.
 - Refining web-only control workflows, OLED/display behavior, and serial diagnostics.

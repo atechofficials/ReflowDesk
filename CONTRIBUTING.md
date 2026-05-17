@@ -10,8 +10,8 @@ Contributions are welcome, but changes should stay focused, practical, and align
 
 ReflowDesk is a desktop SMD reflow soldering hot plate controller. The current firmware targets ESP32-based hardware and supports:
 
-- MAX6675 thermocouple temperature sensing.
-- ADS1115 based NTC temperature sensing.
+- MAX6675 thermocouple temperature sensing with validity checks and spike rejection.
+- ADS1115 based NTC temperature sensing with signed ADC diagnostics, ambient fallback handling, and filtered motherboard temperature readings.
 - Optional ADS1115 ALERT/RDY pin assignment for future firmware features.
 - OLED display user interface.
 - Rotary encoder input.
@@ -30,7 +30,7 @@ ReflowDesk is a desktop SMD reflow soldering hot plate controller. The current f
 - Cooling fan PWM control, 12V fan power control, and tachometer feedback.
 - ReflowDesk AT-MK1 motherboard cooling fan PWM control and tachometer feedback.
 - ReflowDesk AT-MK1 dual NTC behavior: ambient NTC for PID compensation and motherboard NTC for ReflowDesk enclosure cooling.
-- Configurable buzzer sound level, Status LED brightness, OLED brightness, and user alert behavior.
+- Configurable buzzer sound level, Status LED brightness, Status LED color order, OLED brightness, and user alert behavior.
 - Configurable OLED display auto-sleep with rotary-encoder wake behavior.
 - Web-managed physical-controls lock for the rotary encoder and push button, with optional OLED-off web-only operation.
 - NVS-based settings storage with save-skipping for unchanged settings.
@@ -194,6 +194,12 @@ For SSR-controlled AC heaters:
 - Firmware code should treat `_outputOn`, `outputOn()`, and `ssrCommandedOn()` as logical heater ON/OFF state, not as raw GPIO HIGH/LOW state.
 - Diagnostic code that checks the physical GPIO level should compare against the configured `SSR_DRIVER_ON_LEVEL`/`SSR_DRIVER_OFF_LEVEL` instead of assuming one polarity.
 
+Temperature-sensor and status-LED hardware options should also stay centralized in `src/config.h`:
+
+- Sensor validation limits should remain configurable through the project-level sensor limit constants instead of being hardcoded into `sensors.cpp`.
+- NTC divider constants must match the actual resistor values, beta value, and divider supply voltage used by the hardware.
+- `RGB_LED_COLOR_ORDER` should match the addressable RGB LED package/order used by the selected board or development module, for example `NEO_GRB` or `NEO_RGB`.
+
 Partition tables:
 
 | File | Intended Use |
@@ -226,10 +232,13 @@ Do not assume KiCad source files are present in the repository. Hardware documen
 ## Firmware Guidelines
 
 - Keep heater safety behavior conservative.
-- Make sure heater output is forced off during faults, aborts, invalid sensor states, and idle states.
+- Make sure heater output is forced off during faults, aborts, invalid plate-sensor states, and idle states.
+- Do not allow the heater PID loop to continue using stale plate temperature when the thermocouple read is invalid. Ambient NTC failure may use a safe fallback for compensation, but plate thermocouple failure must stop heating.
 - Keep fan failure handling intact: failed cooling must show a warning and keep the heater off.
 - Keep AT-MK1 motherboard fan behavior independent from the hot-plate fan power switch. The motherboard fan is controlled by PWM and tach feedback only.
 - Keep motherboard NTC failure behavior configurable through `src/config.h`.
+- Preserve MAX6675 thermocouple validation, plate temperature spike rejection, ADS1115 signed raw diagnostics, ambient NTC fallback behavior, and board NTC filtering unless the replacement is tested on real hardware.
+- Keep sensor limit constants configurable and documented. Changes to valid temperature ranges, spike thresholds, or NTC filtering limits should include test notes.
 - Use time-windowed heater control for PTC heating elements and SSR output. Do not replace this with high-frequency heater PWM unless the hardware is specifically redesigned for it.
 - For zero-cross AC SSR heater control, keep the heater output as slow time-proportional control using the configured SSR window. Do not use MCU high-frequency PWM for normal AC SSR operation.
 - Keep SSR polarity configurable. Do not assume that GPIO HIGH always means heater ON or that GPIO LOW always means heater OFF.
@@ -280,6 +289,24 @@ PID output percent
 Do not report raw GPIO HIGH/LOW as heater ON/OFF unless the configured SSR polarity is also considered. Web UI/OLED GUI telemetry should report logical SSR/heater state.
 
 If changing `Limits::REFLOW_MAX_C`, `Limits::SAFETY_MAX_C`, warm-up assist thresholds, PID defaults, or heater response checks, include test notes showing that the selected values match the real heating element and do not encourage unsafe operation beyond the heater's practical capability.
+
+---
+
+## Temperature Sensor Validation
+
+Changes to `src/sensors.cpp`, `src/sensors.h`, thermocouple handling, ADS1115/NTC conversion, or sensor limit constants require reflow-aware validation.
+
+When changing temperature-sensor behavior, preserve these expectations:
+
+- Plate temperature comes from the MAX6675 thermocouple path and is the primary heater-control feedback signal.
+- Invalid, open, no-communication, out-of-range, or repeated-spike plate readings must be treated as unsafe for heating.
+- Ambient NTC readings are used for compensation and should remain stable; repeated ambient failures may use a safe fallback value, but should still be reported as not OK.
+- Board/motherboard NTC readings should be filtered enough to avoid fan-control jitter while still responding to real board heating.
+- ADS1115 raw NTC diagnostics should preserve signed raw values so negative/invalid readings remain visible during debugging.
+- Sensor limit values such as valid plate range, spike threshold, and NTC filter rates should stay configurable through `src/config.h` or project-level sensor limit constants.
+- NTC conversion math must match the actual divider orientation and resistor values used by the PCB or development wiring.
+
+For sensor-related pull requests, include test notes showing at least one idle reading check and, when heater control is affected, one controlled heat/reflow run. Useful test notes include plate temperature progression, ambient stability, board temperature behavior, raw ADC values, thermocouple status, and whether any false sensor faults occurred.
 
 ---
 
@@ -341,6 +368,7 @@ When adding or changing feedback controls:
 
 - Keep buzzer level in the 0 to 5 range, where 0 means muted.
 - Keep LED brightness in the 0 to 100 range with 5-point increments, where 0 means the status LED is off.
+- Keep addressable RGB LED color order configurable through `RGB_LED_COLOR_ORDER`; do not assume every ESP32-S3 development board uses the same NeoPixel color order.
 - Keep OLED brightness in the configured 10 to 100 range with 10-point increments unless `REFLOW_OLED_BRIGHTNESS_MAX_PERCENT` changes the upper bound.
 - Keep OLED numeric controls and Web Interface sliders synchronized through the same `SettingsData` fields.
 
@@ -392,6 +420,7 @@ Before submitting a change:
 - Build affected development targets, such as `pio run -e development` or `pio run -e development2`, when touching shared firmware or partition files.
 - Build the filesystem image with `pio run -e at-mk1 -t buildfs` when changing files under `data/`.
 - Test relevant hardware behavior if the change touches IO, sensors, heater control, fan control, buzzer, or display behavior.
+- For temperature-sensor changes, confirm thermocouple status, plate temperature progression, ambient/board NTC readings, signed ADC diagnostics, and absence of false sensor faults during at least one relevant hardware test.
 - For heater-control changes, document SSR polarity, heater type, target temperature tested, observed overshoot, and whether the heater output stayed OFF during idle/fault/abort states.
 - For Web UI/OLED GUI telemetry changes, confirm that SSR/heater state reporting follows logical commanded state and does not confuse raw GPIO level with heater ON/OFF state.
 - Keep changes focused on one topic.
@@ -413,7 +442,7 @@ When reporting a problem, include:
 - Heating element type.
 - SSR module type and polarity, if the issue involves heater control.
 - Power supply details.
-- Relevant serial debug output.
+- Relevant serial debug output, including plate status/raw thermocouple data and NTC ADC values when the issue involves temperature sensing.
 - What you expected to happen.
 - What actually happened.
 - Whether the issue appears during boot, heating, reflow, cooldown, or idle.

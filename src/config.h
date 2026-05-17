@@ -9,7 +9,7 @@
 
 #include <Arduino.h>
 
-#define FW_VERSION "0.8.0"
+#define FW_VERSION "0.8.1"
 
 // Hardware selection
 // PlatformIO environments select the target with build flags. AT-MK1 is the default
@@ -142,6 +142,9 @@ constexpr uint32_t FAN_POWER = 17;
 
 constexpr uint32_t STATUS_LED = 18;
 constexpr uint32_t BUZZER = 7;
+
+#define RGB_LED_COLOR_ORDER NEO_GRB
+
 #elif defined(FIREBEETLE2_ESP32E)
 constexpr uint32_t I2C_SCL = 22;
 constexpr uint32_t I2C_SDA = 21;
@@ -164,6 +167,9 @@ constexpr uint32_t FAN_POWER = 4;
 
 constexpr uint32_t STATUS_LED = 5;
 constexpr uint32_t BUZZER = 26;
+
+#define RGB_LED_COLOR_ORDER NEO_GRB
+
 #elif defined(ESP32_S3_PICO)
 constexpr uint32_t I2C_SCL = 11;
 constexpr uint32_t I2C_SDA = 12;
@@ -186,6 +192,8 @@ constexpr uint32_t FAN_POWER = 40;
 
 constexpr uint32_t STATUS_LED = 21;
 constexpr uint32_t BUZZER = 41;
+
+#define RGB_LED_COLOR_ORDER NEO_RGB
 #endif
 }
 
@@ -276,7 +284,6 @@ constexpr uint16_t OLED_SLEEP_DEFAULT_SECONDS = REFLOW_OLED_SLEEP_DEFAULT_SECOND
 }
 
 namespace Limits {
-
 // Reflow Profiles Limits/setting ranges
 constexpr int16_t PREHEAT_MIN_C = 50;
 constexpr int16_t PREHEAT_MAX_C = 180;
@@ -307,6 +314,19 @@ constexpr uint8_t OLED_BRIGHTNESS_MAX_PERCENT = REFLOW_OLED_BRIGHTNESS_MAX_PERCE
 constexpr uint8_t OLED_BRIGHTNESS_STEP_PERCENT = 10;
 }
 
+namespace SensorLimits {
+constexpr float PLATE_SENSOR_MIN_VALID_C = 0.0f;
+constexpr float PLATE_SENSOR_MAX_VALID_C = 300.0f;
+constexpr float PLATE_MAX_JUMP_PER_READ_C = 25.0f;
+constexpr uint8_t PLATE_MAX_SPIKES_BEFORE_FAULT = 3;
+
+constexpr float AMBIENT_MAX_RISE_PER_READ_C = 1.0f;
+constexpr float AMBIENT_MAX_FALL_PER_READ_C = 2.0f;
+
+constexpr float BOARD_MAX_RISE_PER_READ_C = 2.0f;
+constexpr float BOARD_MAX_FALL_PER_READ_C = 3.0f;
+}
+
 namespace HeaterTuning {
 constexpr bool SSR_ACTIVE_LOW = REFLOW_SSR_ACTIVE_LOW;
 
@@ -333,14 +353,14 @@ constexpr float WARMUP_DUTY_NEAR_PERCENT = 50.0f;
 }
 
 namespace BoardCooling {
-
 // Motherboard cooling fan control thresholds and settings
 constexpr float FAN_OFF_C = 40.0f;
 constexpr float FAN_ON_C = 45.0f;
 constexpr float FAN_FULL_C = 65.0f;
 constexpr uint8_t FAN_MIN_PERCENT = 25;
 constexpr uint8_t FAN_MAX_PERCENT = 100;
-constexpr uint8_t FAN_NTC_FAIL_PERCENT = 100;
+// If the board NTC fails, run the fan at this percentage to provide some cooling as a fallback.
+constexpr uint8_t FAN_NTC_FAIL_PERCENT = 80;
 }
 
 constexpr uint8_t OLED_ADDRESS = 0x3C;
@@ -356,11 +376,15 @@ constexpr float NTC_SERIES_OHMS = 100000.0f;
 constexpr float NTC_NOMINAL_OHMS = 100000.0f;
 constexpr float NTC_NOMINAL_TEMP_C = 25.0f;
 constexpr float NTC_BETA = 3950.0f;
-constexpr float NTC_BIAS_VOLTAGE = 3.3f;
+constexpr float NTC_BIAS_VOLTAGE = 3.3f; // 3.3V supply used for the NTC voltage divider
 constexpr uint16_t MAX6675_SW_SPI_DELAY_US = 2;
 constexpr float MIN_HEATER_RESPONSE_RISE_C = 2.0f;
 
 // Set to 1 for serial trace of temperatures, PID output and state changes.
 #ifndef REFLOW_DEBUG
 #define REFLOW_DEBUG 0
+#endif
+
+#ifndef RGB_LED_COLOR_ORDER
+#define RGB_LED_COLOR_ORDER NEO_GRB
 #endif

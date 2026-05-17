@@ -29,7 +29,7 @@ private:
   void writeBuzzer(bool enabled);
   void stopBuzzer();
 
-  Adafruit_NeoPixel _led = Adafruit_NeoPixel(1, Pins::STATUS_LED, NEO_GRB + NEO_KHZ800);
+  Adafruit_NeoPixel _led = Adafruit_NeoPixel(1, Pins::STATUS_LED, RGB_LED_COLOR_ORDER + NEO_KHZ800);
   uint8_t _buzzerLevel = 3;
   uint8_t _remainingBeeps = 0;
   uint16_t _beepMs = 0;

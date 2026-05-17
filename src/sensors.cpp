@@ -13,8 +13,6 @@ namespace {
 constexpr uint8_t PLATE_STATUS_OK = 0x00;
 constexpr uint8_t PLATE_STATUS_OPEN = 0x04;
 constexpr uint8_t PLATE_STATUS_NO_COMM = 0x81;
-constexpr float AMBIENT_MAX_RISE_PER_READ_C = 1.0f;
-constexpr float AMBIENT_MAX_FALL_PER_READ_C = 2.0f;
 }
 
 SensorManager::SensorManager(TwoWire &wire)
@@ -24,7 +22,7 @@ SensorManager::SensorManager(TwoWire &wire)
 void SensorManager::begin() {
   _ambientAdcReady = _ambientAdc.begin();
   if (_ambientAdcReady) {
-    configureAmbientAdc();
+    configureAdc();
   }
 #if REFLOW_DEBUG
   Serial.print(F("ADS1115 addr=0x"));
@@ -56,6 +54,7 @@ void SensorManager::update(uint32_t now, bool force) {
 void SensorManager::readPlate() {
   uint8_t status = _plateThermo.read();
   uint16_t raw = _plateThermo.getRawData();
+  
   _sample.plateRaw = raw;
   _sample.plateReadOnce = true;
 
@@ -72,11 +71,39 @@ void SensorManager::readPlate() {
   }
 
   float c = _plateThermo.getCelsius();
-  if (isnan(c) || c < 0.0f || c > 350.0f) {
+
+  if (!isfinite(c) || c < SensorLimits::PLATE_SENSOR_MIN_VALID_C || c > SensorLimits::PLATE_SENSOR_MAX_VALID_C) {
     _sample.plateStatus = PLATE_STATUS_NO_COMM;
     _sample.plateOk = false;
     return;
   }
+
+  // Hot Plate Temp Spike Filtering
+  if (_hasLastGoodPlate) {
+    float jump = fabsf(c - _lastGoodPlateC);
+
+    if (jump > SensorLimits::PLATE_MAX_JUMP_PER_READ_C) {
+      if (_plateSpikeCount < 255) {
+        _plateSpikeCount++;
+      }
+
+      if (_plateSpikeCount < SensorLimits::PLATE_MAX_SPIKES_BEFORE_FAULT) {
+        // Ignore this isolated spike and keep last known good value.
+        _sample.plateStatus = PLATE_STATUS_OK;
+        _sample.plateOk = true;
+        _sample.plateC = _lastGoodPlateC;
+        return;
+      }
+
+      _sample.plateStatus = PLATE_STATUS_NO_COMM;
+      _sample.plateOk = false;
+      return;
+    }
+  }
+
+  _plateSpikeCount = 0;
+  _hasLastGoodPlate = true;
+  _lastGoodPlateC = c;
 
   _sample.plateStatus = PLATE_STATUS_OK;
   _sample.plateOk = true;
@@ -87,41 +114,63 @@ void SensorManager::readAmbient() {
   float measuredC = _sample.ambientC;
   bool ok = false;
   bool readOnce = _sample.ambientReadOnce;
-  uint16_t adcRaw = _sample.ambientAdc;
+  int16_t adcRaw = _sample.ambientAdc;
   readThermistor(ADS1115_AMBIENT_NTC_CHANNEL, measuredC, ok, readOnce, adcRaw);
   _sample.ambientReadOnce = readOnce;
   _sample.ambientOk = ok;
   _sample.ambientAdc = adcRaw;
   if (ok) {
+    _ambientFailCount = 0;
     _sample.ambientC = filterAmbientC(measuredC);
+  } 
+  else {
+    if (_ambientFailCount < 255) {
+      _ambientFailCount++;
+    }
+    if (_ambientFailCount >= 3) {
+      _sample.ambientC = 25.0f; // default/fallback value if ADC reading fails repeatedly
+      _ambientFilterReady = false;
+    }
   }
 }
 
 void SensorManager::readBoard() {
-  readThermistor(ADS1115_BOARD_NTC_CHANNEL, _sample.boardC, _sample.boardOk, _sample.boardReadOnce,
-                 _sample.boardAdc);
+  float measuredC = _sample.boardC;
+  bool ok = false;
+  bool readOnce = _sample.boardReadOnce;
+  int16_t adcRaw = _sample.boardAdc;
+  
+  readThermistor(ADS1115_BOARD_NTC_CHANNEL, measuredC, ok, readOnce, adcRaw);
+  
+  _sample.boardReadOnce = readOnce;
+  _sample.boardOk = ok;
+  _sample.boardAdc = adcRaw;
+
+  if (ok) {
+    _sample.boardC = filterBoardC(measuredC);
+  }
 }
 
-bool SensorManager::ensureAmbientAdc() {
+bool SensorManager::ensureAdc() {
   if (_ambientAdcReady) {
     return true;
   }
 
   _ambientAdcReady = _ambientAdc.begin();
   if (_ambientAdcReady) {
-    configureAmbientAdc();
+    configureAdc();
   }
   return _ambientAdcReady;
 }
 
-void SensorManager::configureAmbientAdc() {
+void SensorManager::configureAdc() {
   _ambientAdc.setGain(ADS1X15_GAIN_4096MV);
   _ambientAdc.setMode(ADS1X15_MODE_SINGLE);
   _ambientAdc.setDataRate(ADS1X15_DATARATE_4);
 }
 
-void SensorManager::readThermistor(uint8_t channel, float &temperatureC, bool &ok, bool &readOnce, uint16_t &adcRaw) {
-  if (!ensureAmbientAdc()) {
+void SensorManager::readThermistor(uint8_t channel, float &temperatureC, bool &ok, bool &readOnce, int16_t &adcRaw) {
+  if (!ensureAdc()) {
     readOnce = true;
     ok = false;
     adcRaw = 0;
@@ -131,14 +180,16 @@ void SensorManager::readThermistor(uint8_t channel, float &temperatureC, bool &o
   int16_t raw = _ambientAdc.readADC(channel);
   bool readingOk = false;
   float c = 0.0f;
+  
   if (raw > 0) {
     float voltage = _ambientAdc.toVoltage(raw);
     c = thermistorCelsius(voltage, readingOk);
   }
 
-  adcRaw = raw > 0 ? static_cast<uint16_t>(raw) : 0;
+  adcRaw = raw;
   readOnce = true;
   ok = readingOk;
+  
   if (readingOk) {
     temperatureC = c;
   }
@@ -152,13 +203,32 @@ float SensorManager::filterAmbientC(float measuredC) {
   }
 
   float delta = measuredC - _ambientFilteredC;
-  if (delta > AMBIENT_MAX_RISE_PER_READ_C) {
-    delta = AMBIENT_MAX_RISE_PER_READ_C;
-  } else if (delta < -AMBIENT_MAX_FALL_PER_READ_C) {
-    delta = -AMBIENT_MAX_FALL_PER_READ_C;
+  if (delta > SensorLimits::AMBIENT_MAX_RISE_PER_READ_C) {
+    delta = SensorLimits::AMBIENT_MAX_RISE_PER_READ_C;
+  } else if (delta < -SensorLimits::AMBIENT_MAX_FALL_PER_READ_C) {
+    delta = -SensorLimits::AMBIENT_MAX_FALL_PER_READ_C;
   }
   _ambientFilteredC += delta;
   return _ambientFilteredC;
+}
+
+float SensorManager::filterBoardC(float measuredC) {
+  if (!_boardFilterReady) {
+    _boardFilteredC = measuredC;
+    _boardFilterReady = true;
+    return _boardFilteredC;
+  }
+
+  float delta = measuredC - _boardFilteredC;
+
+  if (delta > SensorLimits::BOARD_MAX_RISE_PER_READ_C) {
+    delta = SensorLimits::BOARD_MAX_RISE_PER_READ_C;
+  } else if (delta < -SensorLimits::BOARD_MAX_FALL_PER_READ_C) {
+    delta = -SensorLimits::BOARD_MAX_FALL_PER_READ_C;
+  }
+
+  _boardFilteredC += delta;
+  return _boardFilteredC;
 }
 
 float SensorManager::thermistorCelsius(float voltage, bool &ok) const {
