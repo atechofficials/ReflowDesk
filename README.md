@@ -10,7 +10,7 @@ ReflowDesk is a small desktop SMD reflow soldering hot plate designed for makers
 
 The project is currently in active development. The first hardware revision, **ReflowDesk AT-MK1**, is available as early hardware manufacturing files for prototype validation.
 
-Current firmware version: **v0.8.1**.
+Current firmware version: **v0.9.0**.
 
 ---
 
@@ -66,12 +66,14 @@ ReflowDesk is intended to sit on a workbench and provide a controlled heating su
 - Configurable RGB Status LED color order through `RGB_LED_COLOR_ORDER` in `src/config.h` for boards using different NeoPixel color orders.
 - Configurable buzzer sound level for user alerts and process notifications.
 - Safety cutoff support for over-temperature and fault conditions.
+- Mode-selectable PID heater output for zero-cross AC SSR builds and low-voltage DC MOSFET PWM builds.
 - Time-proportional PID heater control for zero-cross SSR driven AC PTC heating elements.
+- 1 kHz 10-bit DC heater PWM mode for EL817-isolated MOSFET driven DC PTC heating elements.
 - Configurable SSR output polarity for active-low and active-high SSR modules.
 - Improved heater PID behavior with staged warm-up assist, derivative-on-measurement, conditional integral anti-windup, duty slew limiting, and per-window SSR duty latching.
 - Heater control limits tuned for practical 220VAC PTC hot plate behavior around the 220-230°C range.
 - Compact serial event logging for settings changes, OLED/Web commands, reflow start/stage/abort/cooldown events, faults, OTA, OLED sleep/wake, and physical-control lock events.
-- Designed to support AC and DC PTC heating element options.
+- Designed to support AC and DC PTC heating element options using the same `HEATER_CTRL` signal with hardware jumper and firmware-mode selection.
 - Breadboard-friendly reference pinout resources for common ESP32 boards and project modules.
 - Hardware visual assets including project logos and PCB render images.
 
@@ -90,6 +92,7 @@ ReflowDesk is intended to sit on a workbench and provide a controlled heating su
 | v0.7.0 | Added OLED brightness control, exposed Status LED brightness on the OLED settings UI, added Web Interface based device physical-control lock and optional OLED-off locked mode, improved the OLED locked-controls screen and unlock routing, refined Web Interface control styling, and expanded serial event logs for OLED/Web commands, settings sources, reflow/cooldown/abort events, OTA, reboot, factory reset, OLED sleep/wake, and control-lock transitions. Updated settings storage to version 6 for display/control-lock persistence. |
 | v0.8.0 | Improved AC PTC heater control and SSR handling. Added configurable active-low/active-high SSR output polarity, replaced ambiguous SSR pin-state reporting with logical SSR commanded-on reporting, refined PID heater control with staged warm-up assist, conditional anti-windup, duty slew limiting, per-window duty latching, sensor-invalid fail-safe shutdown paths, and heater limits better matched to the tested 220VAC PTC heating element behavior. Reflow testing showed improved heating response to a 215°C reflow stage target with reduced overshoot in soak/reflow stages. |
 | v0.8.1 | Improved temperature sensor reliability and validation. Added signed ADS1115 ADC reporting for NTC channels, shared ADC setup naming, configurable sensor validation/filtering limits, board NTC filtering, ambient NTC repeated-failure fallback behavior, MAX6675 plate-temperature validity checks, and thermocouple spike rejection using the last known good plate reading. Added configurable `RGB_LED_COLOR_ORDER` in `src/config.h` for RGB Status LED color-order compatibility across ESP32-S3 boards. Reflow testing with the updated sensor code completed successfully using the Sn63Pb37 leaded profile, with stable thermocouple status, stable ambient readings, and no false sensor fault observed. |
+| v0.9.0 | Added control logic for DC PTC heating element. Added compile-time DC PTC heater PWM mode while preserving the default AC SSR time-window heater mode. DC mode drives `HEATER_CTRL` with 1 kHz, 10-bit LEDC PWM and uses the existing PID controller, safety shutdown, abort, and cooldown paths. Added mode-aware heater telemetry for Web, OLED, and serial output so AC builds report SSR output and DC builds report MOSFET/PWM output. Added the `at-mk1-dcptc` and `development2-dcptc` build environments for AT-MK1/ESP32-S3 DC PTC heater firmware builds. |
 
 ---
 
@@ -103,7 +106,7 @@ The Web Interface mirrors the same firmware state used by the OLED GUI:
 - Stop an active heating stage from the browser or physical input.
 - Edit global settings from either UI and keep the other UI synchronized.
 - Select, rename, and edit reflow profiles from the browser.
-- View live process telemetry, faults, fan state/RPM, logical SSR commanded state, SSR duty/window duty, stage timing, and safety status.
+- View live process telemetry, faults, fan state/RPM, mode-aware heater output state, heater duty/window duty or PWM duty, stage timing, and safety status.
 - Change the Web Interface PIN and sign in again after the interface re-locks.
 - Switch between local light and dark themes.
 - Adjust buzzer sound level and status LED brightness.
@@ -119,8 +122,8 @@ The web console uses local assets stored under `data/` and does not require inte
 
 | Asset | Version |
 | --- | --- |
-| `data/index.html` | v1.2.7 |
-| `data/js/app.js` | v1.2.7 |
+| `data/index.html` | v1.2.8 |
+| `data/js/app.js` | v1.2.8 |
 | `data/css/style.css` | v1.1.8 |
 
 ---
@@ -148,6 +151,32 @@ Firmware v0.7.0 adds OLED brightness control. OLED brightness can be adjusted fr
 The Web Interface can also lock the physical rotary encoder and push button. When this lock is active, the OLED shows a locked-controls message and the device must be unlocked from the Web Interface. A second web-only option can keep the OLED display off while the controls are locked, including during active reflow, cooldown, and fault conditions. This mode is intended for bench setups where ReflowDesk is operated only from the browser.
 
 Firmware v0.8.0 refines heater output reporting by using logical SSR commanded-on status instead of ambiguous raw GPIO-level naming. This keeps Web/OLED diagnostics clearer on both active-low and active-high SSR modules.
+
+---
+
+## Heater Output Modes
+
+### Hardware Configuration
+
+ReflowDesk AT-MK1 routes the `HEATER_CTRL` signal to either the AC SSR driver path or the DC MOSFET driver path through hardware jumpers. The physical jumper selection must match the firmware build:
+
+- **JP2 shorted, JP3 open:** AC PTC heater control through the zero-cross SSR path. Leave `REFLOW_HEATER_DC_PWM` undefined or set it to `0`.
+- **JP3 shorted, JP2 open:** Low-voltage DC PTC heater control through the MOSFET path. Set `REFLOW_HEATER_DC_PWM` to `1`.
+- **Do not short JP2 and JP3 together.** The AC and DC heater driver paths must not be connected to `HEATER_CTRL` at the same time.
+
+### Firmware Behavior
+
+AC mode remains the default firmware behavior. It uses the existing slow time-proportional heater window for zero-cross SSR modules, with `REFLOW_SSR_ACTIVE_LOW` defining whether the SSR input is active-low or active-high.
+
+DC mode keeps the same PID calculation but changes only the output driver. The firmware drives `HEATER_CTRL` with 1 kHz, 10-bit LEDC PWM for the EL817-isolated MOSFET gate path. The 1 kHz default is intentionally conservative because the EL817 optocoupler path is not a high-speed MOSFET gate driver. Do not use higher frequency PWM signal unless future hardware validation proves the optocoupler and gate circuit switch cleanly and remain thermally safe at that frequency.
+
+The same DC PWM firmware path is used for both 12V and 24V DC PTC heaters. Voltage-specific behavior belongs to the power supply, MOSFET stage, heater wattage, plate thermal design, and PID/profile tuning rather than a separate firmware output mode.
+
+### Validation Notes
+
+Initial v0.9.0 DC validation was completed with a 24V DC PTC heater on the JP3/MOSFET path. The existing PID values were able to reach and hold the low-temperature `Sn42Bi58 lead-free` profile reflow target closely, while preheat and soak behavior showed the expected dependency on heater wattage and plate thermal mass. For a different 12V/24V heater, keep the same firmware output mode but retune profiles or PID values if the ramp rate, overshoot, or soak settling behavior changes.
+
+---
 
 ## Temperature Sensing And Validation
 
@@ -241,9 +270,9 @@ The `hardware/pinouts/` folder contains pinout diagrams for common ESP32 and ESP
 
 | Heating Element | Intended Use | Status |
 | --- | --- | --- |
-| 12VDC PTC Heating Element | Low-voltage DC hot plate build | Supported by hardware design |
-| 24VDC PTC Heating Element | Higher-power low-voltage DC hot plate build | Supported by hardware design |
-| 220VAC PTC Heating Element | AC-powered hot plate build using time-proportional zero-cross SSR control | Supported by hardware design and tested in firmware v0.8.x heater-control and sensor-validation runs |
+| 12VDC PTC Heating Element | Low-voltage DC hot plate build using JP3 and `REFLOW_HEATER_DC_PWM=1` | Supported by hardware design; uses the shared 1 kHz DC PWM firmware path; heater-specific PID/profile validation is still recommended |
+| 24VDC PTC Heating Element | Higher-power low-voltage DC hot plate build using JP3 and `REFLOW_HEATER_DC_PWM=1` | Supported by hardware design and initially validated in firmware v0.9.0 with the shared 1 kHz DC PWM path; heater-specific PID/profile validation is still recommended |
+| 220VAC PTC Heating Element | AC-powered hot plate build using JP2 and `REFLOW_HEATER_DC_PWM=0` with time-proportional zero-cross SSR control | Supported by hardware design and tested in firmware v0.8.x heater-control and sensor-validation runs |
 
 ---
 
@@ -257,6 +286,7 @@ The `hardware/pinouts/` folder contains pinout diagrams for common ESP32 and ESP
 | `data/` | LittleFS data files, including Web Interface assets and JSON reflow profile presets |
 | `include/` | Shared project headers and support files |
 | `lib/` | Project-local libraries if needed |
+| `scripts/` | PlatformIO helper scripts, including merged factory firmware image generation |
 | `test/` | Test and validation workspace |
 
 ---
@@ -267,7 +297,7 @@ ReflowDesk is not a finished production release yet. The project is currently fo
 
 - Validating the ReflowDesk AT-MK1 Motherboard v1 PCB.
 - Validating the ReflowDesk AT-MK1 Daughterboard v1 PCB.
-- Testing AC and DC heater control behavior, including configurable SSR polarity and time-proportional AC SSR control.
+- Testing AC and DC heater control behavior, including configurable SSR polarity, time-proportional AC SSR control, and 1 kHz DC MOSFET PWM control.
 - Testing Hot Plate cooling fan control and RPM feedback.
 - Testing ReflowDesk AT-MK1 motherboard temperature monitoring, filtered board NTC behavior, and motherboard cooling fan behavior.
 - Validating MAX6675 thermocouple and ADS1115 NTC reliability during full reflow cycles.
@@ -283,10 +313,26 @@ ReflowDesk is not a finished production release yet. The project is currently fo
 | Environment | Target | Partition Table | Notes |
 | --- | --- | --- | --- |
 | `at-mk1` | ReflowDesk AT-MK1 Motherboard | `partitions_8mb_ota.csv` | Primary ReflowDesk hardware target. |
+| `at-mk1-dcptc` | ReflowDesk AT-MK1 Motherboard | `partitions_8mb_ota.csv` | DC PTC heater PWM target with `REFLOW_HEATER_DC_PWM=1`; use only with JP3 installed and JP2 open. |
 | `development` | ESP32 4 MB flash / no PSRAM development board | `partitions_4mb_ota.csv` | Development and breadboard testing target. |
 | `development2` | ESP32-S3 16 MB flash / 2 MB PSRAM development board | `partitions_16mb_ota.csv` | Experimental development target. ReflowDesk does not require this much flash. |
+| `development2-dcptc` | ESP32-S3 16 MB flash / 2 MB PSRAM development board | `partitions_16mb_ota.csv` | DC PTC heater PWM target with `REFLOW_HEATER_DC_PWM=1`; use only with MOSFET module connected |
 
 The final ReflowDesk AT-MK1 v1 motherboard uses the Espressif ESP32-S3-WROOM-1U-N8R8 module. The 8 MB flash partition table is enough for the current firmware and expected near-term features.
+
+### Merged Factory Firmware Binaries
+
+Firmware builds run `scripts/merge_factory_bin.py` as a PlatformIO post-build script through `extra_scripts = post:scripts/merge_factory_bin.py`.
+
+After a successful build, the script writes merged factory images to `release_bins/`. The output filename includes the configured release board name, detected flash size, firmware version, and release suffix, for example:
+
+```text
+ReflowDesk_AT-MK1_8MB_v0.9.0-beta.1_factory.bin
+```
+
+The merged image combines the bootloader, partition table, Arduino `boot_app0.bin`, and app firmware at the standard offsets `0x0`, `0x8000`, `0xE000`, and `0x10000`. Use these factory binaries for fresh serial flashing at offset `0x0`.
+
+Web OTA must still use the app-only PlatformIO firmware binary from `.pio/build/<environment>/firmware.bin`. Merged factory binaries are not accepted by the Web OTA updater.
 
 When Web Interface assets or JSON profile files change, upload the LittleFS image as well as the firmware:
 

@@ -21,7 +21,7 @@ ReflowDesk is a desktop SMD reflow soldering hot plate controller. The current f
 - Configurable setup AP credentials for future WiFiManager sessions.
 - Light and dark Web Interface themes served from local assets.
 - Web OTA upload for app-only PlatformIO `firmware.bin` images.
-- Heater control with time-windowed PID output for SSR-driven AC PTC heaters and supported PTC heater configurations.
+- Heater control with time-windowed PID output for SSR-driven AC PTC heaters and 1 kHz PWM output for MOSFET-driven DC PTC heaters.
 - Configurable SSR output polarity for active-low and active-high SSR modules through `src/config.h`.
 - Improved heater-control behavior with staged warm-up assist, conditional integral anti-windup, per-window SSR duty latching, and duty slew limiting.
 - Four saved solder paste reflow profiles stored in NVS.
@@ -95,6 +95,7 @@ ReflowDesk/
 |   |-- js/                                    Web Interface JavaScript and vendor libraries
 |   `-- profiles/                              Four optional profile JSON files imported into NVS when changed
 |-- lib/                                       Project-local libraries if needed
+|-- scripts/                                   PlatformIO helper scripts for release and factory firmware images
 |-- src/                                       Main firmware source
 |   |-- alerts.cpp                             Buzzer, LED, and user alert behavior
 |   |-- alerts.h                               Alert controller interface
@@ -132,6 +133,14 @@ ReflowDesk AT-MK1 Motherboard (ESP32-S3) environment:
 pio run -e at-mk1
 ```
 
+ReflowDesk AT-MK1 Motherboard (ESP32-S3) DC PTC heater environment:
+
+```powershell
+pio run -e at-mk1-dcptc
+```
+
+Only use a DC PWM firmware build on AT-MK1 hardware with JP3 jumper shorted and JP2 jumper open.
+
 ESP32 4 MB flash / no PSRAM development environment:
 ```powershell
 pio run -e development
@@ -142,6 +151,14 @@ ESP32-S3 16 MB flash / 2 MB PSRAM development environment:
 ```powershell
 pio run -e development2
 ```
+
+ESP32-S3 DC PTC heater PWM development environment:
+
+```powershell
+pio run -e development2-dcptc
+```
+
+Only use a DC PWM firmware build on development hardware that has a MOSFET module connected.
 
 Build LittleFS image for Web Interface assets and JSON profile files:
 
@@ -155,6 +172,8 @@ Upload firmware and LittleFS assets:
 pio run -e at-mk1 -t upload
 pio run -e at-mk1 -t uploadfs
 ```
+
+Firmware builds also run `scripts/merge_factory_bin.py` as a PlatformIO post-build script. Successful builds place merged factory firmware images in `release_bins/` for release assets and external flashing at offset `0x0`. Browser OTA still requires the app-only `.pio/build/<environment>/firmware.bin` file, not a merged factory image.
 
 Serial monitor:
 
@@ -184,15 +203,33 @@ Pin assignments must stay inside the matching hardware block in `src/config.h`. 
 
 For `ReflowDesk AT-MK1`, the firmware uses ESP32-S3 pin assignments, an 8 MB OTA partition layout, a second NTC channel for motherboard temperature, and a second PWM fan channel for motherboard cooling. For `FireBeetle2 ESP32-E` development hardware, the firmware uses a 4 MB OTA partition layout and a single ADS1115 NTC channel for ambient temperature/PID compensation. The `ESP32_S3_PICO` target is for ESP32-S3 development boards and does not use the AT-MK1 second NTC or second PWM fan path.
 
-Heater-output behavior is also configured from `src/config.h`. Keep SSR polarity and heater-type options centralized there instead of hardcoding GPIO levels in `heater.cpp` or other modules. 
+Heater-output behavior is also configured from `src/config.h`. Keep SSR polarity and heater-type options centralized there instead of hardcoding GPIO levels in `heater.cpp` or other modules.
 
-For SSR-controlled AC heaters:
+### AT-MK1 hardware jumper configuration:
 
+The AT-MK1 heater jumper and firmware mode must match:
+
+- JP2 shorted and JP3 open: AC PTC heater path through the zero-cross SSR driver, with `REFLOW_HEATER_DC_PWM` undefined or set to `0`.
+- JP3 shorted and JP2 open: DC PTC heater path through the EL817-isolated MOSFET driver, with `REFLOW_HEATER_DC_PWM` set to `1`.
+- Never short JP2 and JP3 together. The AC and DC driver paths must not be connected to `HEATER_CTRL` at the same time.
+
+### For SSR-controlled AC heaters:
+
+- `REFLOW_HEATER_DC_PWM=0` should only be used when the JP2 AC PTC heater jumper is shorted/closed and JP3 jumper is open.
 - `REFLOW_SSR_ACTIVE_LOW` should describe the actual SSR input module polarity.
 - Active-low SSR modules must drive the heater ON when the GPIO is LOW and OFF when the GPIO is HIGH.
 - Active-high SSR modules must drive the heater ON when the GPIO is HIGH and OFF when the GPIO is LOW.
 - Firmware code should treat `_outputOn`, `outputOn()`, and `ssrCommandedOn()` as logical heater ON/OFF state, not as raw GPIO HIGH/LOW state.
 - Diagnostic code that checks the physical GPIO level should compare against the configured `SSR_DRIVER_ON_LEVEL`/`SSR_DRIVER_OFF_LEVEL` instead of assuming one polarity.
+
+### For MOSFET-controlled DC heaters:
+
+- `REFLOW_HEATER_DC_PWM=1` should only be used when the JP3 DC PTC heater jumper is shorted/closed and JP2 jumper is open.
+- The default DC output is 1 kHz, 10-bit LEDC PWM on `HEATER_CTRL`.
+- Use the same firmware output path for 12V and 24V DC PTC heaters; tune the PID/profile for the actual heater wattage and plate thermal mass.
+- Do not raise the PWM frequency, unless future hardware testing proves the EL817 optocoupler and MOSFET gate path switch cleanly and remain thermally safe.
+
+### Temperature-sensor and status-LED:
 
 Temperature-sensor and status-LED hardware options should also stay centralized in `src/config.h`:
 
@@ -200,7 +237,7 @@ Temperature-sensor and status-LED hardware options should also stay centralized 
 - NTC divider constants must match the actual resistor values, beta value, and divider supply voltage used by the hardware.
 - `RGB_LED_COLOR_ORDER` should match the addressable RGB LED package/order used by the selected board or development module, for example `NEO_GRB` or `NEO_RGB`.
 
-Partition tables:
+### Partition tables:
 
 | File | Intended Use |
 | --- | --- |
@@ -239,8 +276,9 @@ Do not assume KiCad source files are present in the repository. Hardware documen
 - Keep motherboard NTC failure behavior configurable through `src/config.h`.
 - Preserve MAX6675 thermocouple validation, plate temperature spike rejection, ADS1115 signed raw diagnostics, ambient NTC fallback behavior, and board NTC filtering unless the replacement is tested on real hardware.
 - Keep sensor limit constants configurable and documented. Changes to valid temperature ranges, spike thresholds, or NTC filtering limits should include test notes.
-- Use time-windowed heater control for PTC heating elements and SSR output. Do not replace this with high-frequency heater PWM unless the hardware is specifically redesigned for it.
-- For zero-cross AC SSR heater control, keep the heater output as slow time-proportional control using the configured SSR window. Do not use MCU high-frequency PWM for normal AC SSR operation.
+- Use time-windowed heater control for zero-cross AC SSR output. Do not use MCU high-frequency PWM for normal AC SSR operation.
+- Use DC heater PWM only when `REFLOW_HEATER_DC_PWM=1` and the hardware is jumpered for the JP3 MOSFET path.
+- Keep the default DC heater PWM at 1 kHz unless the EL817 optocoupler and MOSFET gate path are validated at a different frequency.
 - Keep SSR polarity configurable. Do not assume that GPIO HIGH always means heater ON or that GPIO LOW always means heater OFF.
 - Keep logical heater state separate from electrical pin state. `_outputOn` should mean firmware-commanded heater ON/OFF, while GPIO HIGH/LOW should be derived from the configured SSR polarity.
 - Preserve PID anti-windup behavior, staged warm-up assist, duty slew limiting, and per-window duty latching unless a replacement is tested on real heater hardware.
@@ -269,7 +307,9 @@ When changing heater control, test and document:
 
 - SSR module polarity used during testing: active-low or active-high.
 - Heating element type: AC PTC through SSR, low-voltage DC PTC, or another controlled load.
-- Mains/heater voltage and approximate heater temperature capability.
+- Firmware heater-output mode: `AC_SSR` or `DC_PWM`.
+- Physical heater jumper installed: JP2 for AC SSR or JP3 for DC MOSFET.
+- Mains/heater voltage, DC supply voltage where applicable, approximate heater wattage, and approximate heater temperature capability.
 - Reflow target tested, especially high-temperature behavior above 200°C.
 - Whether preheat, soak, and reflow stages overshoot or undershoot their targets.
 - Whether the Web Interface/OLED GUI SSR state matches the actual commanded heater state.
@@ -287,6 +327,19 @@ PID output percent
 ```
 
 Do not report raw GPIO HIGH/LOW as heater ON/OFF unless the configured SSR polarity is also considered. Web UI/OLED GUI telemetry should report logical SSR/heater state.
+
+For DC MOSFET PWM testing, the expected control path is:
+
+```text
+PID output percent
+  -> 1 kHz 10-bit LEDC PWM duty
+  -> HEATER_CTRL
+  -> EL817 optocoupler
+  -> MOSFET gate path
+  -> DC PTC heater power
+```
+
+For DC heater tests, confirm 0%, 25%, 50%, and 100% duty at the optocoupler/MOSFET gate path where possible. Fault, abort, cooldown, idle, reset, and invalid-sensor states must force PWM to 0%. Also check that the optocoupler and MOSFET remain thermally reasonable during a real heating run. Record whether the existing PID defaults are acceptable for the tested heater or whether profile/PID tuning is needed for the heater wattage, supply voltage, and plate thermal mass.
 
 If changing `Limits::REFLOW_MAX_C`, `Limits::SAFETY_MAX_C`, warm-up assist thresholds, PID defaults, or heater response checks, include test notes showing that the selected values match the real heating element and do not encourage unsafe operation beyond the heater's practical capability.
 
@@ -405,6 +458,7 @@ Hardware-related contributions should consider:
 - Hot-surface protection.
 - Safe default states during reset and boot.
 - External pull-up/pull-down requirements for SSR inputs, especially active-low SSR modules.
+- External pull-up/pull-down and gate-state requirements for MOSFET inputs, especially during boot and reset.
 - Whether the heater can accidentally turn ON while the MCU pin is floating, during bootloader entry, or before `pinMode()` is configured.
 - PCB manufacturer process limits for high-current and mains-voltage areas.
 
@@ -418,10 +472,12 @@ Before submitting a change:
 
 - Build the main hardware target with `pio run -e at-mk1`.
 - Build affected development targets, such as `pio run -e development` or `pio run -e development2`, when touching shared firmware or partition files.
+- Build `pio run -e development2-dcptc` or `pio run -e at-mk1-dcptc` when touching heater-output code or DC PWM mode support.
 - Build the filesystem image with `pio run -e at-mk1 -t buildfs` when changing files under `data/`.
+- Check the generated `release_bins/` factory images when preparing a GitHub firmware release.
 - Test relevant hardware behavior if the change touches IO, sensors, heater control, fan control, buzzer, or display behavior.
 - For temperature-sensor changes, confirm thermocouple status, plate temperature progression, ambient/board NTC readings, signed ADC diagnostics, and absence of false sensor faults during at least one relevant hardware test.
-- For heater-control changes, document SSR polarity, heater type, target temperature tested, observed overshoot, and whether the heater output stayed OFF during idle/fault/abort states.
+- For heater-control changes, document SSR polarity or DC PWM mode, JP2/JP3 jumper state, heater type, target temperature tested, observed overshoot, and whether the heater output stayed OFF during idle/fault/abort states.
 - For Web UI/OLED GUI telemetry changes, confirm that SSR/heater state reporting follows logical commanded state and does not confuse raw GPIO level with heater ON/OFF state.
 - Keep changes focused on one topic.
 - Update `docs/` when the change affects setup, hardware, calibration, fabrication, or operating behavior.
@@ -440,7 +496,7 @@ When reporting a problem, include:
 - ESP32 board/module used.
 - PCB version or breadboard wiring used.
 - Heating element type.
-- SSR module type and polarity, if the issue involves heater control.
+- SSR module type/polarity or DC MOSFET jumper/mode, if the issue involves heater control.
 - Power supply details.
 - Relevant serial debug output, including plate status/raw thermocouple data and NTC ADC values when the issue involves temperature sensing.
 - What you expected to happen.

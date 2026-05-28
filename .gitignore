@@ -28,3 +28,7 @@ src/CMakeLists.txt
 
 # ESP-IDF auto-generated SDK configuration files
 sdkconfig.*
+
+# Compiled ReflowDesk firmware .bin files
+*.bin
+release_bins/

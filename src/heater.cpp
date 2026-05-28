@@ -9,13 +9,15 @@
 #include <math.h>
 
 namespace {
-#if SSR_ACTIVE_LOW
+#if REFLOW_SSR_ACTIVE_LOW
 constexpr uint8_t SSR_DRIVER_ON_LEVEL = LOW;
 constexpr uint8_t SSR_DRIVER_OFF_LEVEL = HIGH;
 #else
 constexpr uint8_t SSR_DRIVER_ON_LEVEL = HIGH;
 constexpr uint8_t SSR_DRIVER_OFF_LEVEL = LOW;
 #endif
+
+constexpr uint8_t HEATER_PWM_CHANNEL = 7;
 
 constexpr float INTEGRAL_MIN = HeaterTuning::INTEGRAL_MIN;
 constexpr float INTEGRAL_MAX = HeaterTuning::INTEGRAL_MAX;
@@ -39,6 +41,32 @@ bool readSsrCommandedOnFromPin() {
 void writeSsrElectrical(bool on) {
   digitalWrite(Pins::HEATER_CTRL, on ? SSR_DRIVER_ON_LEVEL : SSR_DRIVER_OFF_LEVEL);
 }
+
+bool attachHeaterPwm() {
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
+  return ledcAttach(Pins::HEATER_CTRL, HeaterTuning::DC_PWM_FREQ_HZ, HeaterTuning::DC_PWM_BITS);
+#else
+  ledcSetup(HEATER_PWM_CHANNEL, HeaterTuning::DC_PWM_FREQ_HZ, HeaterTuning::DC_PWM_BITS);
+  ledcAttachPin(Pins::HEATER_CTRL, HEATER_PWM_CHANNEL);
+  return true;
+#endif
+}
+
+uint16_t dutyPercentToPwmCounts(float dutyPercent) {
+  dutyPercent = constrain(dutyPercent, 0.0f, 100.0f);
+  return static_cast<uint16_t>((dutyPercent * HeaterTuning::DC_PWM_MAX_DUTY + 50.0f) / 100.0f);
+}
+
+void writeHeaterPwmCounts(uint16_t counts) {
+  if (counts > HeaterTuning::DC_PWM_MAX_DUTY) {
+    counts = HeaterTuning::DC_PWM_MAX_DUTY;
+  }
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
+  ledcWrite(Pins::HEATER_CTRL, counts);
+#else
+  ledcWrite(HEATER_PWM_CHANNEL, counts);
+#endif
+}
 }
 
 float HeaterController::clampFloat(float value, float low, float high) {
@@ -55,7 +83,12 @@ float HeaterController::slewLimit(float desired, float previous, float maxStep) 
 
 void HeaterController::begin() {
   pinMode(Pins::HEATER_CTRL, OUTPUT);
+#if REFLOW_HEATER_DC_PWM
+  attachHeaterPwm();
+  writeHeaterPwmCounts(0);
+#else
   writeSsrElectrical(false);
+#endif
 
   _enabled = false;
   _outputOn = false;
@@ -116,7 +149,7 @@ void HeaterController::forceOff() {
   _hasLastInput = false;
   _lastPidMs = 0;
 
-  writeSsrElectrical(false);
+  writeOutput(false);
 }
 
 float HeaterController::applyWarmupAssist(float output, float error) const {
@@ -219,6 +252,12 @@ void HeaterController::serviceWindow(uint32_t now) {
     writeOutput(false);
     return;
   }
+
+#if REFLOW_HEATER_DC_PWM
+  _windowDutyPercent = _dutyPercent;
+  writeDutyPercent(_windowDutyPercent);
+  return;
+#endif
   
   if (_windowDutyPercent <= 0.0f && _dutyPercent > 0.0f) {
     _windowDutyPercent = _dutyPercent;
@@ -242,9 +281,59 @@ void HeaterController::serviceWindow(uint32_t now) {
 
 void HeaterController::writeOutput(bool on) {
   _outputOn = on;
+#if REFLOW_HEATER_DC_PWM
+  writeHeaterPwmCounts(on ? HeaterTuning::DC_PWM_MAX_DUTY : 0);
+#else
   writeSsrElectrical(on);
+#endif
+}
+
+void HeaterController::writeDutyPercent(float dutyPercent) {
+  dutyPercent = clampFloat(dutyPercent, 0.0f, 100.0f);
+  _outputOn = dutyPercent > 0.0f;
+#if REFLOW_HEATER_DC_PWM
+  writeHeaterPwmCounts(dutyPercentToPwmCounts(dutyPercent));
+#else
+  writeSsrElectrical(_outputOn);
+#endif
 }
 
 bool HeaterController::ssrCommandedOn() const {
+#if REFLOW_HEATER_DC_PWM
+  return _outputOn;
+#else
   return _outputOn && readSsrCommandedOnFromPin();
+#endif
+}
+
+const char *HeaterController::modeName() const {
+#if REFLOW_HEATER_DC_PWM
+  return "DC_PWM";
+#else
+  return "AC_SSR";
+#endif
+}
+
+const char *HeaterController::outputLabel() const {
+#if REFLOW_HEATER_DC_PWM
+  return "MOSFET";
+#else
+  return "SSR";
+#endif
+}
+
+uint32_t HeaterController::pwmFrequencyHz() const {
+#if REFLOW_HEATER_DC_PWM
+  return HeaterTuning::DC_PWM_FREQ_HZ;
+#else
+  return 0;
+#endif
+}
+
+uint8_t HeaterController::pwmResolutionBits() const {
+#if REFLOW_HEATER_DC_PWM
+  return HeaterTuning::DC_PWM_BITS;
+#else
+  return 0;
+#endif
 }

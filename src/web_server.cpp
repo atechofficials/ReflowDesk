@@ -1122,9 +1122,15 @@ void ReflowWebServer::addTelemetryJson(JsonObject obj, uint32_t now) const {
   sensors["plateStatus"] = sample.plateStatus;
 
   JsonObject heater = obj["heater"].to<JsonObject>();
+  heater["mode"] = _heater->modeName();
+  heater["outputLabel"] = _heater->outputLabel();
+  heater["dcPwm"] = _heater->dcPwmMode();
+  heater["pwmHz"] = _heater->pwmFrequencyHz();
+  heater["pwmBits"] = _heater->pwmResolutionBits();
   heater["enabled"] = _heater->enabled();
   heater["outputOn"] = _heater->outputOn();
   heater["ssrPinHigh"] = _heater->ssrCommandedOn();
+  heater["commandedOn"] = _heater->heaterCommandedOn();
   heater["dutyPercent"] = _heater->dutyPercent();
 
   JsonObject fan = obj["fan"].to<JsonObject>();

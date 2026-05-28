@@ -1,5 +1,5 @@
 // JavaScript for ReflowDesk Web Interface
-// Version: 1.2.7
+// Version: 1.2.8
 // Github: https://github.com/atechofficials/ReflowDesk
 // Author: Mrinal @atechofficials
 // License: General Public License v3.0
@@ -56,6 +56,7 @@ const els = {
   stageName: $("stage-name"),
   timeLeft: $("time-left"),
   faultName: $("fault-name"),
+  heaterOutputLabel: $("heater-output-label"),
   ssrState: $("ssr-state"),
   ssrDuty: $("ssr-duty"),
   fanState: $("fan-state"),
@@ -696,8 +697,13 @@ function renderTelemetry(data) {
   setText(els.stageName, data.state);
   setText(els.timeLeft, `${data.timeLeftSeconds || 0}s`);
   setText(els.faultName, data.fault || "None");
+  const heaterLabel = heater.outputLabel || "SSR";
+  setText(els.heaterOutputLabel, heaterLabel);
   setText(els.ssrState, fmtBool(heater.outputOn));
-  setText(els.ssrDuty, `${Math.round(heater.dutyPercent || 0)}% duty`);
+  const dutyText = heater.dcPwm
+    ? `${Math.round(heater.dutyPercent || 0)}% PWM`
+    : `${Math.round(heater.dutyPercent || 0)}% duty`;
+  setText(els.ssrDuty, dutyText);
   setText(els.fanState, fmtBool(fan.on));
   setText(els.fanRpm, `${fan.rpm || 0} RPM, ${fan.speedPercent || 0}%`);
   setText(els.boardFanState, boardFan.present ? fmtBool(boardFan.on) : "N/A");

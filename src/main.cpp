@@ -122,6 +122,15 @@ void printSettingsLine(const SettingsData &data) {
   Serial.print(data.deviceControlsLocked ? F("on") : F("off"));
   Serial.print(F(" oledOff="));
   Serial.print(data.oledForcedOff ? F("on") : F("off"));
+  Serial.print(F(" heater="));
+  Serial.print(heater.modeName());
+#if REFLOW_HEATER_DC_PWM
+  Serial.print(F(" pwm="));
+  Serial.print(heater.pwmFrequencyHz());
+  Serial.print(F("Hz/"));
+  Serial.print(heater.pwmResolutionBits());
+  Serial.print(F("bit"));
+#endif
   Serial.print(F(" cool="));
   Serial.print(SettingsStore::coolingProfileName(profile.coolingProfile));
   Serial.print(F(" pid="));
@@ -253,10 +262,18 @@ void printDebugLine(uint32_t now) {
   Serial.print(sample.plateStatus, HEX);
   Serial.print(F(" duty="));
   Serial.print(heater.dutyPercent(), 0);
-  Serial.print(F(" h="));
+  Serial.print(F(" heater="));
+  Serial.print(heater.outputLabel());
+  Serial.print(F(":"));
   Serial.print(heater.outputOn() ? F("ON") : F("OFF"));
+#if REFLOW_HEATER_DC_PWM
+  Serial.print(F(" pwm="));
+  Serial.print(heater.pwmFrequencyHz());
+  Serial.print(F("Hz"));
+#else
   Serial.print(F(" pin="));
   Serial.print(heater.ssrCommandedOn() ? F("H") : F("L"));
+#endif
   Serial.print(F(" fan="));
   Serial.print(fan.speedPercent());
   Serial.print(F(" fp="));
@@ -320,6 +337,20 @@ void setup() {
 
 #if REFLOW_DEBUG
   Serial.println(F("SMD Reflow Plate boot"));
+  Serial.print(F("EV heater mode="));
+  Serial.print(heater.modeName());
+#if REFLOW_HEATER_DC_PWM
+  Serial.print(F(" freq="));
+  Serial.print(heater.pwmFrequencyHz());
+  Serial.print(F("Hz bits="));
+  Serial.print(heater.pwmResolutionBits());
+#else
+  Serial.print(F(" window="));
+  Serial.print(Timing::SSR_WINDOW_MS);
+  Serial.print(F("ms polarity="));
+  Serial.print(HeaterTuning::SSR_ACTIVE_LOW ? F("active-low") : F("active-high"));
+#endif
+  Serial.println();
   printDebugLine(millis());
 #endif
 }

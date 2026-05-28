@@ -28,10 +28,17 @@ public:
   float windowDutyPercent() const { return _windowDutyPercent; }
   
   bool outputOn() const { return _outputOn; }
+  bool heaterCommandedOn() const { return _outputOn; }
   bool ssrCommandedOn() const;
+  bool dcPwmMode() const { return HeaterTuning::DC_PWM_ENABLED; }
+  const char *modeName() const;
+  const char *outputLabel() const;
+  uint32_t pwmFrequencyHz() const;
+  uint8_t pwmResolutionBits() const;
 
 private:
   void writeOutput(bool on);
+  void writeDutyPercent(float dutyPercent);
 
   static float clampFloat(float value, float low, float high);
   static float slewLimit(float desired, float previous, float maxStep);

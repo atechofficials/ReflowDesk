@@ -9,7 +9,7 @@
 
 #include <Arduino.h>
 
-#define FW_VERSION "0.8.1"
+#define FW_VERSION "0.9.0"
 
 // Hardware selection
 // PlatformIO environments select the target with build flags. AT-MK1 is the default
@@ -18,8 +18,13 @@
 // #define FIREBEETLE2_ESP32E
 // #define ESP32_S3_PICO
 
-// PTC Heater Type Selection (Not implemented yet - for future use)
-// Set to 1 for DC PWM control of a PTC heater. Set to 0 for SSR control of an AC PTC heater.
+// PTC heater output mode selection.
+// AT-MK1 hardware uses jumpers to route HEATER_CTRL:
+// - JP2 shorted, JP3 open: 220VAC PTC heater control through the zero-cross SSR circuit.
+//   Leave REFLOW_HEATER_DC_PWM undefined or set to 0.
+// - JP3 shorted, JP2 open: low-voltage DC PTC heater control through the MOSFET circuit.
+//   Set REFLOW_HEATER_DC_PWM to 1.
+// Do not short JP2 and JP3 together. The firmware mode must match the physical jumper.
 // #define REFLOW_HEATER_DC_PWM 1
 
 #if !defined(REFLOW_AT_MK1) && !defined(FIREBEETLE2_ESP32E) && !defined(ESP32_S3_PICO)
@@ -329,6 +334,10 @@ constexpr float BOARD_MAX_FALL_PER_READ_C = 3.0f;
 
 namespace HeaterTuning {
 constexpr bool SSR_ACTIVE_LOW = REFLOW_SSR_ACTIVE_LOW;
+constexpr bool DC_PWM_ENABLED = REFLOW_HEATER_DC_PWM != 0;
+constexpr uint32_t DC_PWM_FREQ_HZ = 1000;
+constexpr uint8_t DC_PWM_BITS = 10;
+constexpr uint16_t DC_PWM_MAX_DUTY = (1U << DC_PWM_BITS) - 1U;
 
 constexpr float INTEGRAL_MIN = -600.0f;
 constexpr float INTEGRAL_MAX = 600.0f;
@@ -351,6 +360,11 @@ constexpr float WARMUP_DUTY_FAR_PERCENT = 95.0f;
 constexpr float WARMUP_DUTY_MID_PERCENT = 80.0f;
 constexpr float WARMUP_DUTY_NEAR_PERCENT = 50.0f;
 }
+
+static_assert(HeaterTuning::DC_PWM_FREQ_HZ == 1000,
+              "The default DC heater PWM frequency is intentionally 1 kHz for the EL817 optocoupler gate path.");
+static_assert(HeaterTuning::DC_PWM_BITS >= 8 && HeaterTuning::DC_PWM_BITS <= 12,
+              "DC heater PWM resolution should remain practical for ESP32 LEDC output.");
 
 namespace BoardCooling {
 // Motherboard cooling fan control thresholds and settings

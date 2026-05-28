@@ -523,12 +523,10 @@ void UiManager::drawHome(const SettingsData &settings, const ReflowController &r
 
   uint8_t statusY = reflow.isFaultLike() ? 42 : (boardFanFailed ? 44 : 34);
   _display.setCursor(0, statusY);
-  _display.print(F("H:"));
+  _display.print(heater.dcPwmMode() ? F("MOS:") : F("SSR:"));
   _display.print(heater.outputOn() ? F("ON ") : F("OFF"));
   _display.print(F(" "));
   _display.print(heater.dutyPercent(), 0);
-  _display.print(F("% P:"));
-  _display.print(heater.ssrCommandedOn() ? F("H") : F("L"));
   _display.print(F(" F:"));
   _display.print(fan.speedPercent());
   _display.print(F("%"));
