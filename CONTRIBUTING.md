@@ -22,6 +22,7 @@ ReflowDesk is a desktop SMD reflow soldering hot plate controller. The current f
 - Light and dark Web Interface themes served from local assets.
 - Web OTA upload for app-only PlatformIO `firmware.bin` images.
 - Heater control with time-windowed PID output for SSR-driven AC PTC heaters and 1 kHz PWM output for MOSFET-driven DC PTC heaters.
+- Heater-type-specific default PID values for 220V AC PTC, 12V DC PTC, and 24V DC PTC firmware builds.
 - Configurable SSR output polarity for active-low and active-high SSR modules through `src/config.h`.
 - Improved heater-control behavior with staged warm-up assist, conditional integral anti-windup, per-window SSR duty latching, and duty slew limiting.
 - Four saved solder paste reflow profiles stored in NVS.
@@ -282,6 +283,7 @@ Do not assume KiCad source files are present in the repository. Hardware documen
 - Keep SSR polarity configurable. Do not assume that GPIO HIGH always means heater ON or that GPIO LOW always means heater OFF.
 - Keep logical heater state separate from electrical pin state. `_outputOn` should mean firmware-commanded heater ON/OFF, while GPIO HIGH/LOW should be derived from the configured SSR polarity.
 - Preserve PID anti-windup behavior, staged warm-up assist, duty slew limiting, and per-window duty latching unless a replacement is tested on real heater hardware.
+- Keep heater-type-specific PID defaults centralized in `src/config.h`. 220V AC PTC, 12V DC PTC, and 24V DC PTC builds may have different default PID values, while user-saved NVS PID settings should continue to override those defaults until changed or factory reset.
 - Avoid aggressive forced duty near the target temperature. Warm-up assist may help far below target, but near the setpoint the PID loop should control the final approach.
 - Treat target overshoot cutoff and absolute safety cutoff as separate concepts. Normal PID behavior should not repeatedly hit the emergency safety cutoff.
 - Keep settings validation strict. Stored settings should be clamped to safe ranges before use.
@@ -341,7 +343,7 @@ PID output percent
 
 For DC heater tests, confirm 0%, 25%, 50%, and 100% duty at the optocoupler/MOSFET gate path where possible. Fault, abort, cooldown, idle, reset, and invalid-sensor states must force PWM to 0%. Also check that the optocoupler and MOSFET remain thermally reasonable during a real heating run. Record whether the existing PID defaults are acceptable for the tested heater or whether profile/PID tuning is needed for the heater wattage, supply voltage, and plate thermal mass.
 
-If changing `Limits::REFLOW_MAX_C`, `Limits::SAFETY_MAX_C`, warm-up assist thresholds, PID defaults, or heater response checks, include test notes showing that the selected values match the real heating element and do not encourage unsafe operation beyond the heater's practical capability.
+If changing `Limits::REFLOW_MAX_C`, `Limits::SAFETY_MAX_C`, warm-up assist thresholds, heater-type PID defaults, or heater response checks, include test notes showing that the selected values match the real heating element and do not encourage unsafe operation beyond the heater's practical capability. Also verify that factory/default settings use the selected `HeaterTuning` PID values and that saved NVS PID settings still override compile-time defaults.
 
 ---
 

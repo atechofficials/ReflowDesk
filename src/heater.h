@@ -45,9 +45,9 @@ private:
 
   float applyWarmupAssist(float output, float error) const;
 
-  float _kp = 6.0f;
-  float _ki = 0.04f;
-  float _kd = 35.0f;
+  float _kp = HeaterTuning::HEATER_PID_KP;
+  float _ki = HeaterTuning::HEATER_PID_KI;
+  float _kd = HeaterTuning::HEATER_PID_KD;
 
   float _integral = 0.0f;
   float _lastInput = 0.0f;

@@ -98,9 +98,9 @@ void HeaterController::begin() {
 }
 
 void HeaterController::configure(float kp, float ki, float kd) {
-  _kp = kp;
-  _ki = ki;
-  _kd = kd;
+  _kp = isfinite(kp) ? clampFloat(kp, 0.0f, 30.0f) : HeaterTuning::HEATER_PID_KP;
+  _ki = isfinite(ki) ? clampFloat(ki, 0.0f, 5.0f) : HeaterTuning::HEATER_PID_KI;
+  _kd = isfinite(kd) ? clampFloat(kd, 0.0f, 200.0f) : HeaterTuning::HEATER_PID_KD;
 }
 
 void HeaterController::reset() {

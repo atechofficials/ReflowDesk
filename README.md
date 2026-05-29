@@ -10,7 +10,7 @@ ReflowDesk is a small desktop SMD reflow soldering hot plate designed for makers
 
 The project is currently in active development. The first hardware revision, **ReflowDesk AT-MK1**, is available as early hardware manufacturing files for prototype validation.
 
-Current firmware version: **v0.9.0**.
+Current firmware version: **v0.9.1**.
 
 ---
 
@@ -69,6 +69,7 @@ ReflowDesk is intended to sit on a workbench and provide a controlled heating su
 - Mode-selectable PID heater output for zero-cross AC SSR builds and low-voltage DC MOSFET PWM builds.
 - Time-proportional PID heater control for zero-cross SSR driven AC PTC heating elements.
 - 1 kHz 10-bit DC heater PWM mode for EL817-isolated MOSFET driven DC PTC heating elements.
+- Heater-type-specific default PID values for 220V AC PTC, 12V DC PTC, and 24V DC PTC firmware builds.
 - Configurable SSR output polarity for active-low and active-high SSR modules.
 - Improved heater PID behavior with staged warm-up assist, derivative-on-measurement, conditional integral anti-windup, duty slew limiting, and per-window SSR duty latching.
 - Heater control limits tuned for practical 220VAC PTC hot plate behavior around the 220-230°C range.
@@ -93,6 +94,7 @@ ReflowDesk is intended to sit on a workbench and provide a controlled heating su
 | v0.8.0 | Improved AC PTC heater control and SSR handling. Added configurable active-low/active-high SSR output polarity, replaced ambiguous SSR pin-state reporting with logical SSR commanded-on reporting, refined PID heater control with staged warm-up assist, conditional anti-windup, duty slew limiting, per-window duty latching, sensor-invalid fail-safe shutdown paths, and heater limits better matched to the tested 220VAC PTC heating element behavior. Reflow testing showed improved heating response to a 215°C reflow stage target with reduced overshoot in soak/reflow stages. |
 | v0.8.1 | Improved temperature sensor reliability and validation. Added signed ADS1115 ADC reporting for NTC channels, shared ADC setup naming, configurable sensor validation/filtering limits, board NTC filtering, ambient NTC repeated-failure fallback behavior, MAX6675 plate-temperature validity checks, and thermocouple spike rejection using the last known good plate reading. Added configurable `RGB_LED_COLOR_ORDER` in `src/config.h` for RGB Status LED color-order compatibility across ESP32-S3 boards. Reflow testing with the updated sensor code completed successfully using the Sn63Pb37 leaded profile, with stable thermocouple status, stable ambient readings, and no false sensor fault observed. |
 | v0.9.0 | Added control logic for DC PTC heating element. Added compile-time DC PTC heater PWM mode while preserving the default AC SSR time-window heater mode. DC mode drives `HEATER_CTRL` with 1 kHz, 10-bit LEDC PWM and uses the existing PID controller, safety shutdown, abort, and cooldown paths. Added mode-aware heater telemetry for Web, OLED, and serial output so AC builds report SSR output and DC builds report MOSFET/PWM output. Added the `at-mk1-dcptc` and `development2-dcptc` build environments for AT-MK1/ESP32-S3 DC PTC heater firmware builds. |
+| v0.9.1 | Added heater-type-specific default PID values for 220V AC PTC, 12V DC PTC, and 24V DC PTC firmware builds. Fixed PID runtime configuration so Web/OLED/NVS PID settings are stored in the heater controller and used by the PID loop instead of trying to mutate compile-time constants. Fresh settings and factory-reset defaults now pull PID values from `src/config.h` through `HeaterTuning`, while existing saved NVS PID settings remain preserved until changed by the user. |
 
 ---
 
@@ -171,6 +173,16 @@ AC mode remains the default firmware behavior. It uses the existing slow time-pr
 DC mode keeps the same PID calculation but changes only the output driver. The firmware drives `HEATER_CTRL` with 1 kHz, 10-bit LEDC PWM for the EL817-isolated MOSFET gate path. The 1 kHz default is intentionally conservative because the EL817 optocoupler path is not a high-speed MOSFET gate driver. Do not use higher frequency PWM signal unless future hardware validation proves the optocoupler and gate circuit switch cleanly and remain thermally safe at that frequency.
 
 The same DC PWM firmware path is used for both 12V and 24V DC PTC heaters. Voltage-specific behavior belongs to the power supply, MOSFET stage, heater wattage, plate thermal design, and PID/profile tuning rather than a separate firmware output mode.
+
+Firmware v0.9.1 adds heater-type-specific default PID values in `src/config.h`. The firmware selects the built-in defaults from the configured heater mode:
+
+| Heater Build | Default PID Source |
+| --- | --- |
+| AC SSR / 220VAC PTC | `REFLOW_DEFAULT_PID_KP`, `REFLOW_DEFAULT_PID_KI`, and `REFLOW_DEFAULT_PID_KD` from the AC branch |
+| 12V DC PTC | DC branch selected by `REFLOW_DC_HEATER_VOLTAGE_12V` |
+| 24V DC PTC | DC branch selected by `REFLOW_DC_HEATER_VOLTAGE_24V` |
+
+The PID values are still user-adjustable from the OLED GUI and Web Interface. Existing saved NVS settings take priority over compile-time defaults, so changing `src/config.h` affects fresh settings, factory reset defaults, and newly initialized devices. To apply new defaults on a device that already has saved PID values, perform a factory reset or update the PID values manually from the UI.
 
 ### Validation Notes
 
@@ -327,7 +339,7 @@ Firmware builds run `scripts/merge_factory_bin.py` as a PlatformIO post-build sc
 After a successful build, the script writes merged factory images to `release_bins/`. The output filename includes the configured release board name, detected flash size, firmware version, and release suffix, for example:
 
 ```text
-ReflowDesk_AT-MK1_8MB_v0.9.0-beta.1_factory.bin
+ReflowDesk_AT-MK1_8MB_v0.9.1-beta.1_factory.bin
 ```
 
 The merged image combines the bootloader, partition table, Arduino `boot_app0.bin`, and app firmware at the standard offsets `0x0`, `0x8000`, `0xE000`, and `0x10000`. Use these factory binaries for fresh serial flashing at offset `0x0`.

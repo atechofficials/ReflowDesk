@@ -9,7 +9,7 @@
 
 #include <Arduino.h>
 
-#define FW_VERSION "0.9.0"
+#define FW_VERSION "0.9.1"
 
 // Hardware selection
 // PlatformIO environments select the target with build flags. AT-MK1 is the default
@@ -26,6 +26,10 @@
 //   Set REFLOW_HEATER_DC_PWM to 1.
 // Do not short JP2 and JP3 together. The firmware mode must match the physical jumper.
 // #define REFLOW_HEATER_DC_PWM 1
+
+// DC PTC Heating Element Voltage Selection:
+// #define REFLOW_DC_HEATER_VOLTAGE_12V
+// #define REFLOW_DC_HEATER_VOLTAGE_24V
 
 #if !defined(REFLOW_AT_MK1) && !defined(FIREBEETLE2_ESP32E) && !defined(ESP32_S3_PICO)
 #define REFLOW_AT_MK1
@@ -84,6 +88,39 @@
 
 #ifndef REFLOW_HEATER_DC_PWM
 #define REFLOW_HEATER_DC_PWM 0
+#endif
+
+#if REFLOW_HEATER_DC_PWM != 0 && REFLOW_HEATER_DC_PWM != 1
+#error "REFLOW_HEATER_DC_PWM must be set to 0 or 1 to match the hardware jumper configuration for the HEATER_CTRL pin."
+#endif
+
+#if REFLOW_HEATER_DC_PWM
+#if defined(REFLOW_DC_HEATER_VOLTAGE_12V) && defined(REFLOW_DC_HEATER_VOLTAGE_24V)
+#error "Select only one DC heater voltage option in config.h or PlatformIO build flags."
+#elif !defined(REFLOW_DC_HEATER_VOLTAGE_12V) && !defined(REFLOW_DC_HEATER_VOLTAGE_24V)
+#define REFLOW_DC_HEATER_VOLTAGE_24V
+#endif
+#endif
+
+// Default PID tuning parameters for fresh settings/factory reset.
+// User-saved PID values in NVS override these defaults at runtime.
+#if REFLOW_HEATER_DC_PWM == 0
+// 220VAC PTC heater with zero-cross SSR time-window control.
+#define REFLOW_DEFAULT_PID_KP 6.0f
+#define REFLOW_DEFAULT_PID_KI 0.04f
+#define REFLOW_DEFAULT_PID_KD 35.0f
+#elif defined(REFLOW_DC_HEATER_VOLTAGE_12V)
+// 12V DC PTC heater with MOSFET PWM control.
+#define REFLOW_DEFAULT_PID_KP 6.0f
+#define REFLOW_DEFAULT_PID_KI 0.04f
+#define REFLOW_DEFAULT_PID_KD 35.0f
+#elif defined(REFLOW_DC_HEATER_VOLTAGE_24V)
+// 24V DC PTC heater with MOSFET PWM control.
+#define REFLOW_DEFAULT_PID_KP 5.5f
+#define REFLOW_DEFAULT_PID_KI 0.03f
+#define REFLOW_DEFAULT_PID_KD 30.0f
+#else
+#error "DC heater PWM mode requires REFLOW_DC_HEATER_VOLTAGE_12V or REFLOW_DC_HEATER_VOLTAGE_24V."
 #endif
 
 static_assert(sizeof(REFLOW_WEB_SETUP_AP_PASSWORD) >= 9 && sizeof(REFLOW_WEB_SETUP_AP_PASSWORD) <= 64,
@@ -359,6 +396,10 @@ constexpr float WARMUP_ERROR_NEAR_C = 15.0f;
 constexpr float WARMUP_DUTY_FAR_PERCENT = 95.0f;
 constexpr float WARMUP_DUTY_MID_PERCENT = 80.0f;
 constexpr float WARMUP_DUTY_NEAR_PERCENT = 50.0f;
+
+constexpr float HEATER_PID_KP = REFLOW_DEFAULT_PID_KP;
+constexpr float HEATER_PID_KI = REFLOW_DEFAULT_PID_KI;
+constexpr float HEATER_PID_KD = REFLOW_DEFAULT_PID_KD;
 }
 
 static_assert(HeaterTuning::DC_PWM_FREQ_HZ == 1000,

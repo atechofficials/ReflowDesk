@@ -181,9 +181,9 @@ SettingsData SettingsStore::defaults() {
   settings.safeTouchC = 45;
   settings.safetyCutoffC = 245;
   settings.buzzerLevel = 3;
-  settings.kpX100 = 700;
-  settings.kiX100 = 6;
-  settings.kdX100 = 2000;
+  settings.kpX100 = static_cast<int16_t>((HeaterTuning::HEATER_PID_KP * 100.0f) + 0.5f);
+  settings.kiX100 = static_cast<int16_t>((HeaterTuning::HEATER_PID_KI * 100.0f) + 0.5f);
+  settings.kdX100 = static_cast<int16_t>((HeaterTuning::HEATER_PID_KD * 100.0f) + 0.5f);
   settings.ledBrightness = 45;
   settings.oledSleepTimeoutSeconds = normalizeOledSleepTimeoutSeconds(Timing::OLED_SLEEP_DEFAULT_SECONDS);
   settings.oledBrightness = normalizeOledBrightness(100);
