@@ -404,7 +404,15 @@ void loop() {
   printEventLog(now);
 #endif
   alerts.setBuzzerLevel(settings.data().buzzerLevel);
+#if REFLOW_WEB_ENABLED
+  if (webServer.wifiSetupActive()) {
+    alerts.blinkStatusWhite(now);
+  } else {
+    alerts.updateStatusLed(sample.plateC, settings.data(), reflow.isFaultLike());
+  }
+#else
   alerts.updateStatusLed(sample.plateC, settings.data(), reflow.isFaultLike());
+#endif
   alerts.tick(now);
 #if REFLOW_HAS_BOARD_FAN
   ui.draw(now, settings, reflow, heater, fan, sample, &boardFan);

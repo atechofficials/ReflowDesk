@@ -1,5 +1,5 @@
 /* ReflowDesk Web Interface Styles
- * Version: 1.1.8
+ * Version: 1.1.9
  * Github: https://github.com/atechofficials/ReflowDesk
  * Author: Mrinal @atechofficials
  * License: General Public License v3.0
@@ -189,6 +189,14 @@ input, select {
 input:focus, select:focus {
   border-color: var(--field-accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--field-accent) 22%, transparent);
+}
+
+.hidden {
+  display: none !important;
+}
+
+.field-error {
+  color: var(--red);
 }
 
 .primary-btn, .danger-btn, .ghost-btn, .warn-btn {
@@ -1140,6 +1148,12 @@ body.theme-light input[type="file"]::file-selector-button {
   margin: 0;
   color: var(--muted);
   line-height: 1.45;
+}
+
+.modal-pin {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
 }
 
 .modal-actions {

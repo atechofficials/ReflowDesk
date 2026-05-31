@@ -21,6 +21,8 @@ public:
   void beep(uint16_t durationMs);
   void beepPattern(uint8_t count, uint16_t durationMs, uint16_t gapMs);
   void tick(uint32_t now);
+  void blinkStatusWhite(uint32_t now);
+  void clearStatusLed();
   void updateStatusLed(float plateC, const SettingsData &settings, bool fault);
 
 private:

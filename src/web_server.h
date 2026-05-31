@@ -32,6 +32,7 @@ public:
              FanController &fan, AlertManager &alerts, UiManager &ui, FanController *boardFan = nullptr);
   void loop(uint32_t now);
   bool ready() const { return _ready; }
+  bool wifiSetupActive() const { return _wifiSetupLedActive; }
   const char *ipAddress() const { return _ipAddress.c_str(); }
 
 private:
@@ -129,6 +130,7 @@ private:
   bool _otaOk = false;
   bool _restartPending = false;
   bool _resetWiFiBeforeRestart = false;
+  bool _wifiSetupLedActive = false;
   uint32_t _restartAtMs = 0;
 };
 #else
@@ -138,6 +140,7 @@ public:
              UiManager &, FanController * = nullptr) {}
   void loop(uint32_t) {}
   bool ready() const { return false; }
+  bool wifiSetupActive() const { return false; }
   const char *ipAddress() const { return ""; }
 };
 #endif

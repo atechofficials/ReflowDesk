@@ -31,8 +31,9 @@ constexpr const char *SETUP_AP_SSID_KEY = "ap_ssid";
 constexpr const char *SETUP_AP_PASSWORD_KEY = "ap_pass";
 constexpr const char *TOKEN_HEADER = "X-Reflow-Token";
 constexpr const char *MDNS_NAME = "reflowdesk";
-constexpr size_t MAX_PIN_LEN = 32;
-constexpr size_t MIN_PIN_LEN = 4;
+constexpr size_t MAX_PIN_LEN = 8;
+constexpr size_t MIN_PIN_LEN = 6;
+constexpr uint32_t WIFI_SETUP_PORTAL_TIMEOUT_MS = 180000UL;
 constexpr size_t MIN_AP_PASSWORD_LEN = 8;
 constexpr size_t MAX_AP_PASSWORD_LEN = 63;
 constexpr size_t MIN_AP_SSID_LEN = 1;
@@ -50,6 +51,19 @@ T clampLocal(T value, T low, T high) {
 
 bool bodyToJson(const String &body, JsonDocument &doc) {
   return !body.isEmpty() && deserializeJson(doc, body) == DeserializationError::Ok;
+}
+
+bool pinFormatIsValid(const String &pin) {
+  if (pin.length() < MIN_PIN_LEN || pin.length() > MAX_PIN_LEN) {
+    return false;
+  }
+  for (size_t i = 0; i < pin.length(); ++i) {
+    char c = pin.charAt(i);
+    if (c < '0' || c > '9') {
+      return false;
+    }
+  }
+  return true;
 }
 
 #if REFLOW_DEBUG
@@ -218,14 +232,38 @@ void ReflowWebServer::configureWiFi() {
 
   WiFiManager wifiManager;
   wifiManager.setConnectTimeout(20);
+  wifiManager.setConfigPortalTimeout(WIFI_SETUP_PORTAL_TIMEOUT_MS / 1000UL);
   wifiManager.setDebugOutput(REFLOW_DEBUG != 0);
+  _wifiSetupLedActive = !wifiManager.getWiFiIsSaved();
 
   if (_ui != nullptr) {
     _ui->showStatus("WiFi Setup", apName.c_str(), "Open 192.168.4.1");
   }
 
-  bool connected = wifiManager.autoConnect(apName.c_str(), apPassword.c_str());
+  bool connected = false;
+  if (_wifiSetupLedActive) {
+    wifiManager.setConfigPortalBlocking(false);
+    connected = wifiManager.autoConnect(apName.c_str(), apPassword.c_str());
+    uint32_t setupStartMs = millis();
+    while (!connected && WiFi.status() != WL_CONNECTED &&
+           millis() - setupStartMs < WIFI_SETUP_PORTAL_TIMEOUT_MS) {
+      wifiManager.process();
+      if (_alerts != nullptr) {
+        _alerts->blinkStatusWhite(millis());
+      }
+      delay(10);
+      connected = WiFi.status() == WL_CONNECTED;
+    }
+    wifiManager.stopConfigPortal();
+  } else {
+    connected = wifiManager.autoConnect(apName.c_str(), apPassword.c_str());
+  }
+
   if (connected && WiFi.status() == WL_CONNECTED) {
+    _wifiSetupLedActive = false;
+    if (_alerts != nullptr) {
+      _alerts->clearStatusLed();
+    }
     _ipAddress = WiFi.localIP().toString();
     if (MDNS.begin(MDNS_NAME)) {
       MDNS.addService("http", "tcp", HTTP_PORT);
@@ -332,7 +370,7 @@ void ReflowWebServer::handleAuthSetup() {
   }
   String pin = doc["pin"] | "";
   if (!createPin(pin)) {
-    sendError(400, "PIN must be 4 to 32 characters");
+    sendError(400, "PIN must be 6 to 8 digits");
     return;
   }
   createSessionToken();
@@ -671,6 +709,16 @@ void ReflowWebServer::handleFactoryReset() {
     sendError(401, "Authentication required");
     return;
   }
+  JsonDocument doc;
+  if (!bodyToJson(_server.arg("plain"), doc)) {
+    sendError(400, "Invalid JSON");
+    return;
+  }
+  String currentPin = doc["currentPin"] | "";
+  if (!verifyPin(currentPin)) {
+    sendError(401, "Current PIN is incorrect");
+    return;
+  }
   if (!safeForPowerAction()) {
     sendError(409, "Factory reset is locked until the plate is idle and safe to touch");
     return;
@@ -895,7 +943,7 @@ bool ReflowWebServer::authenticatedWs(uint8_t num) const {
 }
 
 bool ReflowWebServer::createPin(const String &pin) {
-  if (pin.length() < MIN_PIN_LEN || pin.length() > MAX_PIN_LEN) {
+  if (!pinFormatIsValid(pin)) {
     return false;
   }
   _pinSalt = randomHex(8);

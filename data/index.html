@@ -1,5 +1,5 @@
 <!-- ReflowDesk Web Interface -->
-<!-- Version: 1.2.8 -->
+<!-- Version: 1.2.9 -->
 <!-- Github: https://github.com/atechofficials/ReflowDesk -->
 <!-- Author: Mrinal @atechofficials -->
 <!-- License: General Public License v3.0 -->
@@ -29,7 +29,9 @@
       <p id="auth-copy">Enter the local web PIN for this ReflowDesk.</p>
       <form id="auth-form">
         <label for="pin-input">Web PIN</label>
-        <input id="pin-input" type="password" inputmode="numeric" minlength="4" maxlength="32" autocomplete="current-password">
+        <input id="pin-input" type="password" inputmode="numeric" pattern="[0-9]*" minlength="6" maxlength="8" autocomplete="current-password">
+        <label for="pin-confirm" class="hidden" id="auth-confirm-row">Confirm Web PIN</label>
+        <input id="pin-confirm" class="hidden" type="password" inputmode="numeric" pattern="[0-9]*" minlength="6" maxlength="8" autocomplete="new-password">
         <button type="submit" class="primary-btn" id="auth-submit">Sign In</button>
       </form>
       <div class="inline-note" id="auth-note"></div>
@@ -238,13 +240,14 @@
             </div>
             <p>Change the local PIN used to protect ReflowDesk controls.</p>
             <div class="warning-box">
-              If this PIN is forgotten, factory reset clears it and lets you create a new one.
+              If this PIN is forgotten, factory reset from the device controls clears it and lets you create a new one.
             </div>
             <div class="form-grid access-form">
-              <label>Current PIN<input id="current-pin" type="password" minlength="4" maxlength="32" autocomplete="current-password"></label>
-              <label>New PIN<input id="new-pin" type="password" minlength="4" maxlength="32" autocomplete="new-password"></label>
-              <label>Confirm New PIN<input id="confirm-pin" type="password" minlength="4" maxlength="32" autocomplete="new-password"></label>
+              <label>Current PIN<input id="current-pin" type="password" inputmode="numeric" pattern="[0-9]*" minlength="6" maxlength="8" autocomplete="current-password"></label>
+              <label>New PIN<input id="new-pin" type="password" inputmode="numeric" pattern="[0-9]*" minlength="6" maxlength="8" autocomplete="new-password"></label>
+              <label>Confirm New PIN<input id="confirm-pin" type="password" inputmode="numeric" pattern="[0-9]*" minlength="6" maxlength="8" autocomplete="new-password"></label>
             </div>
+            <div class="inline-note" id="change-pin-note"></div>
             <div class="button-row settings-action-row">
               <button class="ghost-btn icon-btn" id="change-pin-btn" type="button"><span class="mask icon-lock"></span>Change PIN</button>
             </div>
@@ -450,6 +453,11 @@
       </div>
       <h2 id="modal-title">Confirm Action</h2>
       <p id="modal-message"></p>
+      <div class="modal-pin hidden" id="modal-pin-row">
+        <label for="modal-pin-input">Current Web PIN</label>
+        <input id="modal-pin-input" type="password" inputmode="numeric" pattern="[0-9]*" minlength="6" maxlength="8" autocomplete="current-password">
+        <div class="inline-note" id="modal-pin-note"></div>
+      </div>
       <div class="modal-actions">
         <button class="ghost-btn" id="modal-cancel">Cancel</button>
         <button class="danger-btn" id="modal-confirm">Confirm</button>

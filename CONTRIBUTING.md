@@ -17,8 +17,10 @@ ReflowDesk is a desktop SMD reflow soldering hot plate controller. The current f
 - Rotary encoder input.
 - ESP32-S3 hosted ReflowDesk Web Interface for AT-MK1 and ESP32-S3 development targets.
 - WiFiManager router onboarding with a password-protected setup AP.
-- Local web PIN authentication, Web PIN change/re-lock behavior, REST APIs, and WebSocket telemetry/events.
+- Local web PIN authentication, 6 to 8 digit numeric Web PIN setup/change validation, Web PIN change/re-lock behavior, REST APIs, and WebSocket telemetry/events.
+- PIN-confirmed Web Factory Reset with safety lockouts and OLED Factory Reset support.
 - Configurable setup AP credentials for future WiFiManager sessions.
+- White RGB status LED indication during first-boot WiFi setup when no router credentials are saved.
 - Light and dark Web Interface themes served from local assets.
 - Web OTA upload for app-only PlatformIO `firmware.bin` images.
 - Heater control with time-windowed PID output for SSR-driven AC PTC heaters and 1 kHz PWM output for MOSFET-driven DC PTC heaters.
@@ -383,12 +385,17 @@ The Web Interface is served locally from LittleFS and shares the same live firmw
 - Keep OTA limited to app-only PlatformIO `firmware.bin` images. Merged factory images are for external flashing tools, not browser OTA.
 - Keep WiFi setup AP credentials configurable through `src/config.h` and the Web Interface settings page.
 - Preserve local PIN authentication for protected API and WebSocket access.
+- Preserve the 6 to 8 digit numeric Web PIN rule in both browser validation and firmware API validation.
+- Keep Web Factory Reset protected by current-PIN confirmation in addition to the authenticated browser session and safe-touch lockout.
 - When the Web PIN is changed, re-lock the browser session so the user must sign in with the new PIN.
+- Keep first-boot WiFi setup indication non-destructive: the white RGB status LED may indicate setup mode, but heater, fan, safety, Web, and OLED startup behavior must continue through the normal controller paths once WiFi setup completes.
 - Keep physical-controls lock and OLED-off locked mode synchronized through the same settings path as the OLED GUI. Web-only operation must not bypass reflow safety, cooldown, or fault handling.
 - Keep theme behavior local and deterministic. Theme-specific button, sidebar, input-focus, and slider colors should follow the documented ReflowDesk light/dark palette, while destructive/safety buttons keep their static warning colors.
 - Keep all web assets local under `data/`; do not introduce CDN dependencies for runtime UI behavior.
 - Update the asset version comments in `data/index.html`, `data/js/app.js`, and `data/css/style.css` when those files receive meaningful UI or behavior changes.
 - Build and upload the LittleFS image when files under `data/` change.
+
+Windows and other operating systems may open their own captive-portal URLs when connected to the ReflowDesk setup AP. Do not depend on redirecting HTTPS captive-portal pages; documentation and OLED setup text should continue to point users to `http://192.168.4.1/` as the reliable WiFiManager setup address.
 
 ---
 

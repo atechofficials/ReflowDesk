@@ -10,7 +10,7 @@ ReflowDesk is a small desktop SMD reflow soldering hot plate designed for makers
 
 The project is currently in active development. The first hardware revision, **ReflowDesk AT-MK1**, is available as early hardware manufacturing files for prototype validation.
 
-Current firmware version: **v0.9.3**.
+Current firmware version: **v0.9.4**.
 
 ---
 
@@ -33,6 +33,7 @@ ReflowDesk is intended to sit on a workbench and provide a controlled heating su
 - ESP32-S3 hosted ReflowDesk Web Interface for AT-MK1 and ESP32-S3 development targets.
 - WiFiManager based first-boot WiFi onboarding with password-protected setup AP.
 - Local web PIN authentication for protected device controls.
+- Web PIN setup/change validation with 6 to 8 digit PIN rules and confirmation fields.
 - Web PIN change flow with automatic re-lock after credential updates.
 - Light and dark Web Interface themes using local icon assets.
 - Live REST/WebSocket sync between the OLED GUI and Web Interface.
@@ -40,8 +41,9 @@ ReflowDesk is intended to sit on a workbench and provide a controlled heating su
 - Realtime Chart.js reflow process graph for hot plate, set target, and ambient room temperatures.
 - Browser-based reflow profile editor with profile renaming and editable curve graph.
 - Web OTA firmware upload for PlatformIO app `firmware.bin` images.
-- Web controls for reboot and factory reset with safety lockouts.
+- Web controls for reboot and PIN-confirmed factory reset with safety lockouts.
 - Configurable WiFiManager setup AP name/password, with MAC-suffixed default SSID.
+- White RGB status LED indication while a fresh device is waiting for first router WiFi setup.
 - Four saved solder paste reflow profiles with selectable active profile.
 - Reflow profile presets for preheat, soak, reflow, and cooling behavior.
 - JSON-based reflow profile provisioning through `data/profiles/profile-1.json` to `profile-4.json`.
@@ -99,12 +101,21 @@ ReflowDesk is intended to sit on a workbench and provide a controlled heating su
 | v0.9.1 | Added heater-type-specific default PID values for 220V AC PTC, 12V DC PTC, and 24V DC PTC firmware builds. Fixed PID runtime configuration so Web/OLED/NVS PID settings are stored in the heater controller and used by the PID loop instead of trying to mutate compile-time constants. Fresh settings and factory-reset defaults now pull PID values from `src/config.h` through `HeaterTuning`, while existing saved NVS PID settings remain preserved until changed by the user. |
 | v0.9.2 | Added DC PTC heater PWM approach duty caps for MOSFET builds. DC mode now limits maximum PWM duty in configurable far, mid, and near target-approach bands to reduce thermal coast on low-voltage PTC heaters while still allowing the reflow target to be reached. The cap logic is DC-only, leaves AC SSR time-window behavior unchanged, keeps PID anti-windup aware of the active duty ceiling, and adds compile-time sanity checks for cap band and duty ordering. |
 | v0.9.3 | Fixed false stage target-reached triggers so preheat, soak, and reflow hold timers start only after the measured plate temperature reaches the active target and remains confirmed. Fixed cooling fan RPM reporting so tach readings are forced to zero when fan power/PWM is off. Improved fan tachometer filtering by rejecting implausibly fast tach edges, ignoring impossible RPM samples, and smoothing accepted readings for realistic Web/OLED/serial RPM telemetry. |
+| v0.9.4 | Improved fresh-device and factory-reset workflows. Fresh WiFi setup now blinks the RGB status LED white while no router credentials are saved and clears the setup indication after successful router connection. Web Factory Reset now requires the current Web PIN before clearing settings, Web PIN data, and saved WiFi credentials. Web PIN creation and Web PIN changes now require 6 to 8 digit numeric PINs with confirmation fields and digit-only validation in the Web Interface and firmware API. |
 
 ---
 
 ## Web Interface
 
-Firmware v0.5.4 introduced the ReflowDesk Web Interface for ESP32-S3 targets. On first boot, the device starts a password-protected WiFiManager setup access point so router credentials can be configured. After joining the router, the web console is hosted from LittleFS at the device IP address.
+Firmware v0.5.4 introduced the ReflowDesk Web Interface for ESP32-S3 targets. On first boot, the device starts a password-protected WiFiManager setup access point so router credentials can be configured. Firmware v0.9.4 adds a white RGB status LED blink while the device has no saved router WiFi credentials and is waiting for initial WiFi setup. After joining the router, the setup indication is cleared and the web console is hosted from LittleFS at the device IP address.
+
+If an operating system captive-portal helper opens an external page instead of the setup portal, manually open:
+
+```text
+http://192.168.4.1/
+```
+
+Some operating systems may open their own captive-portal URL when a setup AP has no internet access. ReflowDesk cannot reliably redirect HTTPS captive-portal pages owned by the operating system, so the manual `http://192.168.4.1/` address remains the reliable setup path.
 
 The Web Interface mirrors the same firmware state used by the OLED GUI:
 
@@ -113,6 +124,7 @@ The Web Interface mirrors the same firmware state used by the OLED GUI:
 - Edit global settings from either UI and keep the other UI synchronized.
 - Select, rename, and edit reflow profiles from the browser.
 - View live process telemetry, faults, fan state/RPM, mode-aware heater output state, heater duty/window duty or PWM duty, stage timing, and safety status.
+- Create and change the Web PIN using 6 to 8 digit numeric PIN validation and confirmation fields.
 - Change the Web Interface PIN and sign in again after the interface re-locks.
 - Switch between local light and dark themes.
 - Adjust buzzer sound level and status LED brightness.
@@ -120,6 +132,7 @@ The Web Interface mirrors the same firmware state used by the OLED GUI:
 - Lock the physical rotary encoder controls when the device is being operated from the Web Interface.
 - Optionally turn the OLED display off while physical controls are locked for fully web-controlled operation.
 - Change setup AP credentials used by future WiFiManager sessions.
+- Confirm Factory Reset from the Web Interface by re-entering the current Web PIN.
 - Upload app-only PlatformIO `firmware.bin` images through web OTA when the hot plate is idle and safe.
 
 The web console uses local assets stored under `data/` and does not require internet access after the files are uploaded to LittleFS.
@@ -128,9 +141,9 @@ The web console uses local assets stored under `data/` and does not require inte
 
 | Asset | Version |
 | --- | --- |
-| `data/index.html` | v1.2.8 |
-| `data/js/app.js` | v1.2.8 |
-| `data/css/style.css` | v1.1.8 |
+| `data/index.html` | v1.2.9 |
+| `data/js/app.js` | v1.3.0 |
+| `data/css/style.css` | v1.1.9 |
 
 ---
 
@@ -199,6 +212,8 @@ Firmware v0.9.2 validation with the same 24V DC PTC heater and `Sn42Bi58 lead-fr
 Firmware v0.9.3 validation confirmed that stage target-reached notifications and hold timers wait for the measured plate temperature to reach the set target, cooling fan RPM remains zero while fan power is off, and fan-on tach readings remain within the configured realistic range for the tested 12V 4-wire PWM cooling fan.
 
 Fan tachometer RPM limits are configurable in `src/config.h` through `FanTuning::HOT_PLATE_MAX_VALID_RPM` and `FanTuning::BOARD_MAX_VALID_RPM`. Set these values to match the installed fan models with some margin, especially if the enclosure design uses smaller 40 mm or 60 mm fans with higher rated RPM than the current bench-test fan.
+
+Firmware v0.9.4 validation confirmed that Factory Reset can be triggered from both OLED and Web flows, Web Factory Reset requires the current Web PIN, fresh Web PIN setup enforces digit-only confirmation rules, Web PIN changes re-lock the browser session, and saved-router WiFi startup reaches the idle Web/OLED workflow without blocking on the first-boot setup LED indication.
 
 ---
 
@@ -351,7 +366,7 @@ Firmware builds run `scripts/merge_factory_bin.py` as a PlatformIO post-build sc
 After a successful build, the script writes merged factory images to `release_bins/`. The output filename includes the configured release board name, detected flash size, firmware version, and release suffix, for example:
 
 ```text
-ReflowDesk_AT-MK1_8MB_v0.9.3-beta.1_factory.bin
+ReflowDesk_AT-MK1_8MB_v0.9.4-beta.1_factory.bin
 ```
 
 The merged image combines the bootloader, partition table, Arduino `boot_app0.bin`, and app firmware at the standard offsets `0x0`, `0x8000`, `0xE000`, and `0x10000`. Use these factory binaries for fresh serial flashing at offset `0x0`.

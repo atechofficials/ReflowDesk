@@ -9,7 +9,7 @@
 
 #include <Arduino.h>
 
-#define FW_VERSION "0.9.3"
+#define FW_VERSION "0.9.4"
 
 // Hardware selection
 // PlatformIO environments select the target with build flags. AT-MK1 is the default
@@ -80,9 +80,9 @@
 // 1 = Active-low SSR:  MCU LOW  = SSR ON, MCU HIGH = SSR OFF
 #ifndef REFLOW_SSR_ACTIVE_LOW
 #if defined(REFLOW_AT_MK1) || defined(ESP32_S3_PICO)
-#define REFLOW_SSR_ACTIVE_LOW 1
-#else
 #define REFLOW_SSR_ACTIVE_LOW 0
+#else
+#define REFLOW_SSR_ACTIVE_LOW 1
 #endif
 #endif
 

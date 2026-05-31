@@ -10,6 +10,7 @@
 namespace {
 constexpr uint32_t BUZZER_PWM_FREQ_HZ = 2700;
 constexpr uint8_t BUZZER_PWM_BITS = 8;
+constexpr uint32_t STATUS_LED_WIFI_BLINK_MS = 500;
 #if !(defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3)
 constexpr uint8_t BUZZER_PWM_CHANNEL = 6;
 #endif
@@ -81,6 +82,15 @@ void AlertManager::tick(uint32_t now) {
     --_remainingBeeps;
     _nextToggleMs = _remainingBeeps > 0 ? now + _gapMs : 0;
   }
+}
+
+void AlertManager::blinkStatusWhite(uint32_t now) {
+  const bool ledOn = ((now / STATUS_LED_WIFI_BLINK_MS) % 2U) == 0U;
+  setLed(ledOn ? 255 : 0, ledOn ? 255 : 0, ledOn ? 255 : 0);
+}
+
+void AlertManager::clearStatusLed() {
+  setLed(0, 0, 0);
 }
 
 void AlertManager::updateStatusLed(float plateC, const SettingsData &settings, bool fault) {

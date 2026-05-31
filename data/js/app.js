@@ -1,5 +1,5 @@
 // JavaScript for ReflowDesk Web Interface
-// Version: 1.2.8
+// Version: 1.3.0
 // Github: https://github.com/atechofficials/ReflowDesk
 // Author: Mrinal @atechofficials
 // License: General Public License v3.0
@@ -10,6 +10,9 @@ const $ = id => document.getElementById(id);
 const tokenKey = "reflowdeskToken";
 const themeKey = "reflowdeskTheme";
 const validPages = new Set(["dashboard", "profiles", "settings", "device", "logs"]);
+const PIN_MIN_LEN = 6;
+const PIN_MAX_LEN = 8;
+const PIN_DIGITS_RE = /^\d+$/;
 
 const state = {
   token: sessionStorage.getItem(tokenKey) || "",
@@ -29,6 +32,7 @@ const state = {
   dragProfilePoint: -1,
   modalResolve: null,
   modalOpen: false,
+  modalPinRequired: false,
   faultAckPromptKey: "",
   theme: localStorage.getItem(themeKey) || "dark"
 };
@@ -41,6 +45,8 @@ const els = {
   authForm: $("auth-form"),
   authSubmit: $("auth-submit"),
   pinInput: $("pin-input"),
+  pinConfirm: $("pin-confirm"),
+  authConfirmRow: $("auth-confirm-row"),
   authNote: $("auth-note"),
   wsPill: $("ws-pill"),
   ipPill: $("ip-pill"),
@@ -81,6 +87,9 @@ const els = {
   modalMessage: $("modal-message"),
   modalCancel: $("modal-cancel"),
   modalConfirm: $("modal-confirm"),
+  modalPinRow: $("modal-pin-row"),
+  modalPinInput: $("modal-pin-input"),
+  modalPinNote: $("modal-pin-note"),
   themeToggle: $("theme-toggle"),
   themeLabel: $("theme-label"),
   themeIcon: $("theme-icon")
@@ -188,6 +197,54 @@ function setText(el, value) {
   if (el) el.textContent = value;
 }
 
+function pinMessage(pin, label = "PIN") {
+  if (pin.length < PIN_MIN_LEN) return `${label} must be at least ${PIN_MIN_LEN} digits.`;
+  if (!PIN_DIGITS_RE.test(pin)) return `${label} must use digits only.`;
+  if (pin.length > PIN_MAX_LEN) return `${label} must be at most ${PIN_MAX_LEN} digits.`;
+  return "";
+}
+
+function sanitizePinField(input, noteEl = null) {
+  if (!input) return "";
+  const before = input.value;
+  const digits = before.replace(/\D/g, "").slice(0, PIN_MAX_LEN);
+  input.dataset.pinSanitized = before !== digits ? "1" : "0";
+  if (before !== digits) {
+    input.value = digits;
+    if (noteEl) {
+      setText(noteEl, "Characters are not allowed. Use digits only.");
+      noteEl.classList.add("field-error");
+    }
+  }
+  return input.value;
+}
+
+function bindPinField(input, noteEl = null, onInput = null, label = "PIN") {
+  if (!input) return;
+  input.addEventListener("beforeinput", event => {
+    if (event.data && /\D/.test(event.data)) {
+      event.preventDefault();
+      if (noteEl) {
+        setText(noteEl, "Characters are not allowed. Use digits only.");
+        noteEl.classList.add("field-error");
+      }
+    }
+  });
+  input.addEventListener("input", () => {
+    const value = sanitizePinField(input, noteEl);
+    if (noteEl && input.dataset.pinSanitized !== "1") {
+      setPinNote(noteEl, value.length > 0 ? pinMessage(value, label) : "");
+    }
+    if (onInput) onInput();
+  });
+}
+
+function setPinNote(noteEl, message) {
+  if (!noteEl) return;
+  setText(noteEl, message);
+  noteEl.classList.toggle("field-error", Boolean(message));
+}
+
 function fmtTemp(value, ok = true, decimals = 1) {
   if (!ok || value === null || value === undefined || Number.isNaN(Number(value))) return "--.-C";
   return `${Number(value).toFixed(decimals)}C`;
@@ -248,22 +305,49 @@ function logEvent(message, level = "info", timeMs = Date.now()) {
   }
 }
 
-function showConfirm({ title, message, confirmText = "Confirm", danger = false }) {
+function updateModalPinState() {
+  if (!state.modalPinRequired) return;
+  const pin = sanitizePinField(els.modalPinInput, els.modalPinNote);
+  const message = pin.length === 0 ? "" : pinMessage(pin, "Current PIN");
+  setPinNote(els.modalPinNote, message);
+  els.modalConfirm.disabled = pin.length < PIN_MIN_LEN;
+}
+
+function showConfirm({ title, message, confirmText = "Confirm", danger = false, requirePin = false }) {
   if (state.modalOpen) return Promise.resolve(false);
   state.modalOpen = true;
+  state.modalPinRequired = requirePin;
   setText(els.modalTitle, title);
   setText(els.modalMessage, message);
   setText(els.modalConfirm, confirmText);
   els.modalConfirm.className = danger ? "danger-btn" : "primary-btn";
+  els.modalConfirm.disabled = false;
+  els.modalPinRow.classList.toggle("hidden", !requirePin);
+  els.modalPinInput.value = "";
+  setPinNote(els.modalPinNote, "");
+  if (requirePin) updateModalPinState();
   els.modal.classList.remove("hidden");
+  if (requirePin) setTimeout(() => els.modalPinInput.focus(), 50);
   return new Promise(resolve => {
     state.modalResolve = resolve;
   });
 }
 
 function closeConfirm(result) {
+  if (result && state.modalPinRequired) {
+    const pin = sanitizePinField(els.modalPinInput, els.modalPinNote);
+    const message = pinMessage(pin, "Current PIN");
+    if (message) {
+      setPinNote(els.modalPinNote, message);
+      return;
+    }
+    result = pin;
+  }
   els.modal.classList.add("hidden");
   state.modalOpen = false;
+  state.modalPinRequired = false;
+  els.modalConfirm.disabled = false;
+  els.modalPinRow.classList.add("hidden");
   const resolve = state.modalResolve;
   state.modalResolve = null;
   if (resolve) resolve(result);
@@ -274,8 +358,11 @@ function showAuth(setupMode, note = "") {
   els.appShell.classList.add("locked");
   els.authScreen.classList.remove("hidden");
   els.pinInput.value = "";
+  els.pinConfirm.value = "";
+  els.authConfirmRow.classList.toggle("hidden", !setupMode);
+  els.pinConfirm.classList.toggle("hidden", !setupMode);
   setText(els.authTitle, setupMode ? "Create Web PIN" : "Unlock Device");
-  setText(els.authCopy, setupMode ? "Create the local PIN used to protect ReflowDesk controls." : "Enter the local web PIN for this ReflowDesk.");
+  setText(els.authCopy, setupMode ? "Create a 6 to 8 digit local PIN used to protect ReflowDesk controls." : "Enter the local web PIN for this ReflowDesk.");
   setText(els.authSubmit, setupMode ? "Create PIN" : "Sign In");
   setText(els.authNote, note || (setupMode ? "Factory reset clears this PIN." : ""));
   setTimeout(() => els.pinInput.focus(), 100);
@@ -308,10 +395,23 @@ async function checkAuth() {
 
 async function submitAuth(event) {
   event.preventDefault();
-  const pin = els.pinInput.value.trim();
-  if (pin.length < 4) {
-    setText(els.authNote, "PIN must be at least 4 characters.");
+  const pin = sanitizePinField(els.pinInput, els.authNote);
+  const message = pinMessage(pin, "PIN");
+  if (message) {
+    setPinNote(els.authNote, message);
     return;
+  }
+  if (state.setupMode) {
+    const confirmPin = sanitizePinField(els.pinConfirm, els.authNote);
+    const confirmMessage = pinMessage(confirmPin, "Confirm PIN");
+    if (confirmMessage) {
+      setPinNote(els.authNote, confirmMessage);
+      return;
+    }
+    if (pin !== confirmPin) {
+      setPinNote(els.authNote, "PIN and confirmation do not match.");
+      return;
+    }
   }
   try {
     const path = state.setupMode ? "/api/auth/setup" : "/api/auth/login";
@@ -867,13 +967,21 @@ async function saveSettings() {
 }
 
 async function changePin() {
-  const currentPin = $("current-pin").value.trim();
-  const pin = $("new-pin").value.trim();
-  const confirmPin = $("confirm-pin").value.trim();
-  if (pin.length < 4 || pin.length > 32) {
-    throw new Error("New PIN must be 4 to 32 characters.");
+  const currentPin = sanitizePinField($("current-pin"), $("change-pin-note"));
+  const pin = sanitizePinField($("new-pin"), $("change-pin-note"));
+  const confirmPin = sanitizePinField($("confirm-pin"), $("change-pin-note"));
+  const currentMessage = pinMessage(currentPin, "Current PIN");
+  if (currentMessage) {
+    setPinNote($("change-pin-note"), currentMessage);
+    throw new Error(currentMessage);
+  }
+  const newMessage = pinMessage(pin, "New PIN");
+  if (newMessage) {
+    setPinNote($("change-pin-note"), newMessage);
+    throw new Error(newMessage);
   }
   if (pin !== confirmPin) {
+    setPinNote($("change-pin-note"), "New PIN and confirmation do not match.");
     throw new Error("New PIN and confirmation do not match.");
   }
   await api("/api/auth/setup", { method: "POST", body: { currentPin, pin } });
@@ -888,6 +996,7 @@ async function changePin() {
   $("current-pin").value = "";
   $("new-pin").value = "";
   $("confirm-pin").value = "";
+  setPinNote($("change-pin-note"), "");
   showAuth(false, "Web access PIN changed. Please sign in again with the new PIN.");
 }
 
@@ -916,9 +1025,9 @@ async function startReflow() {
   toast("Reflow started.", "success");
 }
 
-async function command(path, success) {
+async function command(path, success, body = {}) {
   try {
-    await api(path, { method: "POST", body: {} });
+    await api(path, { method: "POST", body });
     toast(success, "success");
     return true;
   } catch (err) {
@@ -928,9 +1037,10 @@ async function command(path, success) {
 }
 
 async function confirmedCommand(options) {
-  const ok = await showConfirm(options);
-  if (!ok) return;
-  const succeeded = await command(options.path, options.success);
+  const result = await showConfirm(options);
+  if (!result) return;
+  const body = options.requirePin ? { currentPin: result } : {};
+  const succeeded = await command(options.path, options.success, body);
   if (succeeded && options.homeAfter) {
     clearSavedPage();
   }
@@ -1010,6 +1120,12 @@ function bindProfileFormUpdates() {
 
 function bindEvents() {
   els.authForm.addEventListener("submit", submitAuth);
+  bindPinField(els.pinInput, els.authNote, null, "PIN");
+  bindPinField(els.pinConfirm, els.authNote, null, "Confirm PIN");
+  bindPinField($("current-pin"), $("change-pin-note"), null, "Current PIN");
+  bindPinField($("new-pin"), $("change-pin-note"), null, "New PIN");
+  bindPinField($("confirm-pin"), $("change-pin-note"), null, "Confirm PIN");
+  bindPinField(els.modalPinInput, els.modalPinNote, updateModalPinState, "Current PIN");
   $("logout-btn").addEventListener("click", async () => {
     try {
       await api("/api/auth/logout", { method: "POST", body: {} });
@@ -1086,9 +1202,10 @@ function bindEvents() {
   }));
   $("factory-btn").addEventListener("click", () => confirmedCommand({
     title: "Factory Reset",
-    message: "Reset ReflowDesk settings and clear the web PIN?",
+    message: "Enter the current Web PIN to reset ReflowDesk settings, clear the Web PIN, and clear saved WiFi credentials.",
     confirmText: "Factory Reset",
     danger: true,
+    requirePin: true,
     path: "/api/device/factory-reset",
     success: "Factory reset requested.",
     homeAfter: true
