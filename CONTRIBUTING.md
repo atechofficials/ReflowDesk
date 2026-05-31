@@ -23,6 +23,7 @@ ReflowDesk is a desktop SMD reflow soldering hot plate controller. The current f
 - Web OTA upload for app-only PlatformIO `firmware.bin` images.
 - Heater control with time-windowed PID output for SSR-driven AC PTC heaters and 1 kHz PWM output for MOSFET-driven DC PTC heaters.
 - Heater-type-specific default PID values for 220V AC PTC, 12V DC PTC, and 24V DC PTC firmware builds.
+- DC PTC approach duty caps for MOSFET PWM builds, with configurable far/mid/near target bands in `src/config.h`.
 - Configurable SSR output polarity for active-low and active-high SSR modules through `src/config.h`.
 - Improved heater-control behavior with staged warm-up assist, conditional integral anti-windup, per-window SSR duty latching, and duty slew limiting.
 - Four saved solder paste reflow profiles stored in NVS.
@@ -228,6 +229,7 @@ The AT-MK1 heater jumper and firmware mode must match:
 - `REFLOW_HEATER_DC_PWM=1` should only be used when the JP3 DC PTC heater jumper is shorted/closed and JP2 jumper is open.
 - The default DC output is 1 kHz, 10-bit LEDC PWM on `HEATER_CTRL`.
 - Use the same firmware output path for 12V and 24V DC PTC heaters; tune the PID/profile for the actual heater wattage and plate thermal mass.
+- Keep DC approach cap thresholds and duty ceilings centralized in `src/config.h`, and tune them from real reflow logs so they reduce overshoot without preventing the reflow target from being reached.
 - Do not raise the PWM frequency, unless future hardware testing proves the EL817 optocoupler and MOSFET gate path switch cleanly and remain thermally safe.
 
 ### Temperature-sensor and status-LED:
@@ -284,6 +286,7 @@ Do not assume KiCad source files are present in the repository. Hardware documen
 - Keep logical heater state separate from electrical pin state. `_outputOn` should mean firmware-commanded heater ON/OFF, while GPIO HIGH/LOW should be derived from the configured SSR polarity.
 - Preserve PID anti-windup behavior, staged warm-up assist, duty slew limiting, and per-window duty latching unless a replacement is tested on real heater hardware.
 - Keep heater-type-specific PID defaults centralized in `src/config.h`. 220V AC PTC, 12V DC PTC, and 24V DC PTC builds may have different default PID values, while user-saved NVS PID settings should continue to override those defaults until changed or factory reset.
+- Preserve DC approach duty-cap behavior for MOSFET builds. The cap should taper power near the target, but it must not starve the reflow stage; PID anti-windup should remain aware of the active cap ceiling.
 - Avoid aggressive forced duty near the target temperature. Warm-up assist may help far below target, but near the setpoint the PID loop should control the final approach.
 - Treat target overshoot cutoff and absolute safety cutoff as separate concepts. Normal PID behavior should not repeatedly hit the emergency safety cutoff.
 - Keep settings validation strict. Stored settings should be clamped to safe ranges before use.
@@ -341,9 +344,9 @@ PID output percent
   -> DC PTC heater power
 ```
 
-For DC heater tests, confirm 0%, 25%, 50%, and 100% duty at the optocoupler/MOSFET gate path where possible. Fault, abort, cooldown, idle, reset, and invalid-sensor states must force PWM to 0%. Also check that the optocoupler and MOSFET remain thermally reasonable during a real heating run. Record whether the existing PID defaults are acceptable for the tested heater or whether profile/PID tuning is needed for the heater wattage, supply voltage, and plate thermal mass.
+For DC heater tests, confirm 0%, 25%, 50%, and 100% duty at the optocoupler/MOSFET gate path where possible. Fault, abort, cooldown, idle, reset, and invalid-sensor states must force PWM to 0%. Also check that the optocoupler and MOSFET remain thermally reasonable during a real heating run. Record whether the existing PID defaults and approach duty caps are acceptable for the tested heater or whether profile/PID/cap tuning is needed for the heater wattage, supply voltage, and plate thermal mass.
 
-If changing `Limits::REFLOW_MAX_C`, `Limits::SAFETY_MAX_C`, warm-up assist thresholds, heater-type PID defaults, or heater response checks, include test notes showing that the selected values match the real heating element and do not encourage unsafe operation beyond the heater's practical capability. Also verify that factory/default settings use the selected `HeaterTuning` PID values and that saved NVS PID settings still override compile-time defaults.
+If changing `Limits::REFLOW_MAX_C`, `Limits::SAFETY_MAX_C`, warm-up assist thresholds, DC approach cap thresholds/duty limits, heater-type PID defaults, or heater response checks, include test notes showing that the selected values match the real heating element and do not encourage unsafe operation beyond the heater's practical capability. Also verify that factory/default settings use the selected `HeaterTuning` PID values and that saved NVS PID settings still override compile-time defaults. When changing DC approach caps, verify that the target is reached within expected stage timing, not only that overshoot is reduced.
 
 ---
 

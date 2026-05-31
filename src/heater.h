@@ -44,6 +44,7 @@ private:
   static float slewLimit(float desired, float previous, float maxStep);
 
   float applyWarmupAssist(float output, float error) const;
+  float dcApproachDutyCeiling(float error) const;
 
   float _kp = HeaterTuning::HEATER_PID_KP;
   float _ki = HeaterTuning::HEATER_PID_KI;

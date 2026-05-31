@@ -9,7 +9,7 @@
 
 #include <Arduino.h>
 
-#define FW_VERSION "0.9.1"
+#define FW_VERSION "0.9.2"
 
 // Hardware selection
 // PlatformIO environments select the target with build flags. AT-MK1 is the default
@@ -116,9 +116,9 @@
 #define REFLOW_DEFAULT_PID_KD 35.0f
 #elif defined(REFLOW_DC_HEATER_VOLTAGE_24V)
 // 24V DC PTC heater with MOSFET PWM control.
-#define REFLOW_DEFAULT_PID_KP 5.5f
-#define REFLOW_DEFAULT_PID_KI 0.03f
-#define REFLOW_DEFAULT_PID_KD 30.0f
+#define REFLOW_DEFAULT_PID_KP 5.0f
+#define REFLOW_DEFAULT_PID_KI 0.02f
+#define REFLOW_DEFAULT_PID_KD 40.0f
 #else
 #error "DC heater PWM mode requires REFLOW_DC_HEATER_VOLTAGE_12V or REFLOW_DC_HEATER_VOLTAGE_24V."
 #endif
@@ -397,6 +397,16 @@ constexpr float WARMUP_DUTY_FAR_PERCENT = 95.0f;
 constexpr float WARMUP_DUTY_MID_PERCENT = 80.0f;
 constexpr float WARMUP_DUTY_NEAR_PERCENT = 50.0f;
 
+// DC MOSFET PWM approach caps reduce thermal coast as the plate nears a stage target.
+// AC SSR mode continues to use the normal time-window output path without these caps.
+constexpr float DC_APPROACH_CAP_FAR_ERROR_C = 25.0f;
+constexpr float DC_APPROACH_CAP_MID_ERROR_C = 12.0f;
+constexpr float DC_APPROACH_CAP_NEAR_ERROR_C = 4.0f;
+
+constexpr float DC_APPROACH_CAP_FAR_DUTY_PERCENT = 85.0f;
+constexpr float DC_APPROACH_CAP_MID_DUTY_PERCENT = 65.0f;
+constexpr float DC_APPROACH_CAP_NEAR_DUTY_PERCENT = 45.0f;
+
 constexpr float HEATER_PID_KP = REFLOW_DEFAULT_PID_KP;
 constexpr float HEATER_PID_KI = REFLOW_DEFAULT_PID_KI;
 constexpr float HEATER_PID_KD = REFLOW_DEFAULT_PID_KD;
@@ -406,6 +416,12 @@ static_assert(HeaterTuning::DC_PWM_FREQ_HZ == 1000,
               "The default DC heater PWM frequency is intentionally 1 kHz for the EL817 optocoupler gate path.");
 static_assert(HeaterTuning::DC_PWM_BITS >= 8 && HeaterTuning::DC_PWM_BITS <= 12,
               "DC heater PWM resolution should remain practical for ESP32 LEDC output.");
+static_assert(HeaterTuning::DC_APPROACH_CAP_FAR_ERROR_C > HeaterTuning::DC_APPROACH_CAP_MID_ERROR_C &&
+                  HeaterTuning::DC_APPROACH_CAP_MID_ERROR_C > HeaterTuning::DC_APPROACH_CAP_NEAR_ERROR_C,
+              "DC heater approach cap error bands must be ordered far > mid > near.");
+static_assert(HeaterTuning::DC_APPROACH_CAP_FAR_DUTY_PERCENT >= HeaterTuning::DC_APPROACH_CAP_MID_DUTY_PERCENT &&
+                  HeaterTuning::DC_APPROACH_CAP_MID_DUTY_PERCENT >= HeaterTuning::DC_APPROACH_CAP_NEAR_DUTY_PERCENT,
+              "DC heater approach cap duty limits must be ordered far >= mid >= near.");
 
 namespace BoardCooling {
 // Motherboard cooling fan control thresholds and settings

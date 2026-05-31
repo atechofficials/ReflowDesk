@@ -166,6 +166,26 @@ float HeaterController::applyWarmupAssist(float output, float error) const {
   return output;
 }
 
+float HeaterController::dcApproachDutyCeiling(float error) const {
+#if REFLOW_HEATER_DC_PWM
+  if (error <= 0.0f) {
+    return 100.0f;
+  }
+
+  if (error <= HeaterTuning::DC_APPROACH_CAP_NEAR_ERROR_C) {
+    return HeaterTuning::DC_APPROACH_CAP_NEAR_DUTY_PERCENT;
+  }
+  if (error <= HeaterTuning::DC_APPROACH_CAP_MID_ERROR_C) {
+    return HeaterTuning::DC_APPROACH_CAP_MID_DUTY_PERCENT;
+  }
+  if (error <= HeaterTuning::DC_APPROACH_CAP_FAR_ERROR_C) {
+    return HeaterTuning::DC_APPROACH_CAP_FAR_DUTY_PERCENT;
+  }
+#endif
+
+  return 100.0f;
+}
+
 void HeaterController::updatePid(uint32_t now, float currentC, float targetC, float ambientC) {
   if (!_enabled) {
     return;
@@ -226,9 +246,10 @@ void HeaterController::updatePid(uint32_t now, float currentC, float targetC, fl
     rawOutput = 0.0f;
   }
 
-  float limitedOutput = clampFloat(rawOutput, 0.0f, 100.0f);
+  float outputCeiling = clampFloat(dcApproachDutyCeiling(error), 0.0f, 100.0f);
+  float limitedOutput = clampFloat(rawOutput, 0.0f, outputCeiling);
 
-  bool saturatedHigh = limitedOutput >= 100.0f;
+  bool saturatedHigh = limitedOutput >= outputCeiling;
   bool saturatedLow  = limitedOutput <= 0.0f;
 
   bool integralPushesHigh = error > 0.0f;
