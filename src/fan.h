@@ -18,7 +18,8 @@ public:
   explicit FanController(uint32_t pwmPin = Pins::FAN_PWM,
                          uint32_t tachPin = Pins::FAN_TACH,
                          uint32_t powerPin = Pins::FAN_POWER,
-                         uint8_t pwmChannel = 0);
+                         uint8_t pwmChannel = 0,
+                         uint16_t maxValidRpm = FanTuning::HOT_PLATE_MAX_VALID_RPM);
 
   void begin();
   void update(uint32_t now);
@@ -29,7 +30,7 @@ public:
   uint8_t requestedPercent() const { return _requestedPercent; }
   bool isOn() const { return _powerEnabled && _appliedPercent > 0; }
   bool powerEnabled() const { return _powerEnabled; }
-  uint16_t rpm() const { return _rpm; }
+  uint16_t rpm() const { return isOn() ? _rpm : 0; }
   bool failed() const { return _failed; }
 
 private:
@@ -45,6 +46,8 @@ private:
   const uint32_t _tachPin;
   const uint32_t _powerPin;
   const uint8_t _pwmChannel;
+  const uint16_t _maxValidRpm;
+  const uint32_t _minTachEdgeUs;
 
   volatile uint32_t _tachPulses = 0;
   volatile uint32_t _tachRejected = 0;

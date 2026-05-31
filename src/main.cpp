@@ -24,8 +24,9 @@ SettingsStore settings(AppWire);
 SensorManager sensors(AppWire);
 HeaterController heater;
 #if REFLOW_HAS_BOARD_FAN
-FanController fan(Pins::FAN_PWM, Pins::FAN_TACH, Pins::FAN_POWER, 0);
-FanController boardFan(Pins::FAN_PWM2, Pins::FAN_TACH2, FanController::NO_POWER_PIN, 1);
+FanController fan(Pins::FAN_PWM, Pins::FAN_TACH, Pins::FAN_POWER, 0, FanTuning::HOT_PLATE_MAX_VALID_RPM);
+FanController boardFan(Pins::FAN_PWM2, Pins::FAN_TACH2, FanController::NO_POWER_PIN, 1,
+                       FanTuning::BOARD_MAX_VALID_RPM);
 #else
 FanController fan;
 #endif

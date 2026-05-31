@@ -9,7 +9,7 @@
 
 #include <Arduino.h>
 
-#define FW_VERSION "0.9.2"
+#define FW_VERSION "0.9.3"
 
 // Hardware selection
 // PlatformIO environments select the target with build flags. AT-MK1 is the default
@@ -432,6 +432,13 @@ constexpr uint8_t FAN_MIN_PERCENT = 25;
 constexpr uint8_t FAN_MAX_PERCENT = 100;
 // If the board NTC fails, run the fan at this percentage to provide some cooling as a fallback.
 constexpr uint8_t FAN_NTC_FAIL_PERCENT = 80;
+}
+
+namespace FanTuning {
+// Set these near the maximum realistic RPM for the installed fan model plus margin.
+// Smaller 40 mm / 60 mm fans may need a higher limit than the current bench fan.
+constexpr uint16_t HOT_PLATE_MAX_VALID_RPM = 4500;
+constexpr uint16_t BOARD_MAX_VALID_RPM = 4500;
 }
 
 constexpr uint8_t OLED_ADDRESS = 0x3C;

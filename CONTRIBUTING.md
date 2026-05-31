@@ -29,8 +29,10 @@ ReflowDesk is a desktop SMD reflow soldering hot plate controller. The current f
 - Four saved solder paste reflow profiles stored in NVS.
 - JSON-based reflow profile provisioning from LittleFS.
 - On-device editing of profile stage temperatures, stage times, and cooling behavior.
+- Stage target-reached confirmation that waits for measured plate temperature before starting hold timers.
 - Cooling fan PWM control, 12V fan power control, and tachometer feedback.
 - ReflowDesk AT-MK1 motherboard cooling fan PWM control and tachometer feedback.
+- Cooling fan RPM reporting with fan-power-state gating and configurable tach plausibility filtering for realistic fan telemetry.
 - ReflowDesk AT-MK1 dual NTC behavior: ambient NTC for PID compensation and motherboard NTC for ReflowDesk enclosure cooling.
 - Configurable buzzer sound level, Status LED brightness, Status LED color order, OLED brightness, and user alert behavior.
 - Configurable OLED display auto-sleep with rotary-encoder wake behavior.
@@ -275,6 +277,8 @@ Do not assume KiCad source files are present in the repository. Hardware documen
 - Make sure heater output is forced off during faults, aborts, invalid plate-sensor states, and idle states.
 - Do not allow the heater PID loop to continue using stale plate temperature when the thermocouple read is invalid. Ambient NTC failure may use a safe fallback for compensation, but plate thermocouple failure must stop heating.
 - Keep fan failure handling intact: failed cooling must show a warning and keep the heater off.
+- Keep fan RPM reporting tied to real fan operation. When fan power or commanded fan PWM is off, reported RPM should be zero even if the tach input sees noise.
+- Keep fan tach filtering realistic for the selected fan class. Reject implausibly fast tach edges and impossible RPM samples instead of reporting noise as fan speed, and keep max valid RPM limits configurable for different fan sizes.
 - Keep AT-MK1 motherboard fan behavior independent from the hot-plate fan power switch. The motherboard fan is controlled by PWM and tach feedback only.
 - Keep motherboard NTC failure behavior configurable through `src/config.h`.
 - Preserve MAX6675 thermocouple validation, plate temperature spike rejection, ADS1115 signed raw diagnostics, ambient NTC fallback behavior, and board NTC filtering unless the replacement is tested on real hardware.
@@ -285,6 +289,7 @@ Do not assume KiCad source files are present in the repository. Hardware documen
 - Keep SSR polarity configurable. Do not assume that GPIO HIGH always means heater ON or that GPIO LOW always means heater OFF.
 - Keep logical heater state separate from electrical pin state. `_outputOn` should mean firmware-commanded heater ON/OFF, while GPIO HIGH/LOW should be derived from the configured SSR polarity.
 - Preserve PID anti-windup behavior, staged warm-up assist, duty slew limiting, and per-window duty latching unless a replacement is tested on real heater hardware.
+- Keep stage target-reached logic strict enough that hold timers do not start early. The plate temperature should reach the active target before the stage is marked as holding.
 - Keep heater-type-specific PID defaults centralized in `src/config.h`. 220V AC PTC, 12V DC PTC, and 24V DC PTC builds may have different default PID values, while user-saved NVS PID settings should continue to override those defaults until changed or factory reset.
 - Preserve DC approach duty-cap behavior for MOSFET builds. The cap should taper power near the target, but it must not starve the reflow stage; PID anti-windup should remain aware of the active cap ceiling.
 - Avoid aggressive forced duty near the target temperature. Warm-up assist may help far below target, but near the setpoint the PID loop should control the final approach.
@@ -400,8 +405,10 @@ The firmware currently supports cooling profiles:
 When changing cooling logic, preserve these expectations:
 
 - Fan OFF means fan PWM is 0% and fan 12V power is OFF.
+- Reported fan RPM should be zero when the fan is off, even if the tach input sees electrical noise.
 - Any running fan duty should respect the fan's minimum reliable running duty.
 - Fan tachometer feedback should remain part of failure detection.
+- Tachometer filtering should reject physically implausible edge timing and unrealistic RPM samples for the fan being validated. Update `FanTuning::HOT_PLATE_MAX_VALID_RPM` and `FanTuning::BOARD_MAX_VALID_RPM` when changing to a fan with a different rated speed.
 
 ---
 
@@ -483,6 +490,8 @@ Before submitting a change:
 - Test relevant hardware behavior if the change touches IO, sensors, heater control, fan control, buzzer, or display behavior.
 - For temperature-sensor changes, confirm thermocouple status, plate temperature progression, ambient/board NTC readings, signed ADC diagnostics, and absence of false sensor faults during at least one relevant hardware test.
 - For heater-control changes, document SSR polarity or DC PWM mode, JP2/JP3 jumper state, heater type, target temperature tested, observed overshoot, and whether the heater output stayed OFF during idle/fault/abort states.
+- For reflow state-machine changes, confirm that target-reached notifications and hold timers match the measured plate temperature instead of a broad early threshold.
+- For fan-control changes, confirm fan-off RPM reads zero, fan-on RPM stays plausible for the tested fan, and stall/failure detection still works.
 - For Web UI/OLED GUI telemetry changes, confirm that SSR/heater state reporting follows logical commanded state and does not confuse raw GPIO level with heater ON/OFF state.
 - Keep changes focused on one topic.
 - Update `docs/` when the change affects setup, hardware, calibration, fabrication, or operating behavior.

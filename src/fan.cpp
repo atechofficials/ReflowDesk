@@ -17,13 +17,19 @@ constexpr uint32_t FAN_RPM_SAMPLE_MS = 1000;
 constexpr uint32_t FAN_STALL_GRACE_MS = 3000;
 constexpr uint16_t FAN_MIN_OK_RPM = 300;
 constexpr uint8_t FAN_TACH_PULSES_PER_REV = 2;
-constexpr uint32_t FAN_TACH_MIN_EDGE_US = 2000;
 constexpr uint8_t FAN_POWER_ON_LEVEL = HIGH;
 constexpr uint8_t FAN_POWER_OFF_LEVEL = LOW;
+
+uint32_t tachMinEdgeUs(uint16_t maxValidRpm) {
+  uint16_t rpmLimit = maxValidRpm < FAN_MIN_OK_RPM ? FAN_MIN_OK_RPM : maxValidRpm;
+  return 60000000UL / (static_cast<uint32_t>(rpmLimit) * FAN_TACH_PULSES_PER_REV);
+}
 }
 
-FanController::FanController(uint32_t pwmPin, uint32_t tachPin, uint32_t powerPin, uint8_t pwmChannel)
-    : _pwmPin(pwmPin), _tachPin(tachPin), _powerPin(powerPin), _pwmChannel(pwmChannel) {}
+FanController::FanController(uint32_t pwmPin, uint32_t tachPin, uint32_t powerPin, uint8_t pwmChannel,
+                             uint16_t maxValidRpm)
+    : _pwmPin(pwmPin), _tachPin(tachPin), _powerPin(powerPin), _pwmChannel(pwmChannel),
+      _maxValidRpm(maxValidRpm), _minTachEdgeUs(tachMinEdgeUs(maxValidRpm)) {}
 
 void FanController::begin() {
   pinMode(_pwmPin, OUTPUT);
@@ -42,6 +48,16 @@ void FanController::update(uint32_t now) {
     resetTachWindow(now);
   }
 
+  bool shouldRun = _powerEnabled && _appliedPercent > 0;
+  if (!shouldRun) {
+    _rpm = 0;
+    _stallStartMs = 0;
+    if (now - _lastRpmMs >= FAN_RPM_SAMPLE_MS) {
+      resetTachWindow(now);
+    }
+    return;
+  }
+
   if (now - _lastRpmMs >= FAN_RPM_SAMPLE_MS) {
     uint32_t elapsedMs = now - _lastRpmMs;
     noInterrupts();
@@ -52,15 +68,16 @@ void FanController::update(uint32_t now) {
 
     if (elapsedMs > 0) {
       uint32_t rpm = (pulses * 60000UL) / (elapsedMs * FAN_TACH_PULSES_PER_REV);
-      _rpm = static_cast<uint16_t>(rpm > 65535UL ? 65535UL : rpm);
+      if (rpm <= _maxValidRpm) {
+        uint16_t measuredRpm = static_cast<uint16_t>(rpm);
+        if (_rpm == 0 || measuredRpm == 0) {
+          _rpm = measuredRpm;
+        } else {
+          _rpm = static_cast<uint16_t>((static_cast<uint32_t>(_rpm) * 3U + measuredRpm + 2U) / 4U);
+        }
+      }
     }
     _lastRpmMs = now;
-  }
-
-  bool shouldRun = _powerEnabled && _appliedPercent > 0;
-  if (!shouldRun) {
-    _stallStartMs = 0;
-    return;
   }
 
   if (static_cast<int32_t>(now - _startupAssistUntilMs) < 0) {
@@ -128,7 +145,7 @@ void FanController::tachIsr(void *arg) {
 
   uint32_t nowUs = micros();
   uint32_t deltaUs = nowUs - fan->_lastTachUs;
-  if (deltaUs >= FAN_TACH_MIN_EDGE_US) {
+  if (deltaUs >= fan->_minTachEdgeUs) {
     fan->_tachPulses = fan->_tachPulses + 1;
     fan->_lastTachUs = nowUs;
   } else {

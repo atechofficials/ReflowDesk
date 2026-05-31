@@ -7,6 +7,11 @@
 
 #include "reflow.h"
 
+namespace {
+constexpr float STAGE_TARGET_REACHED_TOLERANCE_C = 0.0f;
+constexpr uint32_t STAGE_TARGET_REACHED_CONFIRM_MS = 1000;
+}
+
 ReflowController::ReflowController(HeaterController &heater, FanController &fan, AlertManager &alerts)
     : _heater(heater), _fan(fan), _alerts(alerts) {}
 
@@ -42,6 +47,7 @@ void ReflowController::abort() {
   _state = ReflowState::Aborted;
   _faultReason = FaultReason::UserAbort;
   _holdStartMs = 0;
+  _targetReachCandidateMs = 0;
   _alerts.beepPattern(3, 120, 100);
 }
 
@@ -121,9 +127,19 @@ void ReflowController::update(uint32_t now, const SettingsData &settings, const 
     return;
   }
 
-  if (_holdStartMs == 0 && sample.plateC >= target - 3.0f) {
-    _holdStartMs = now;
-    _alerts.beep(80);
+  if (_holdStartMs == 0) {
+    bool targetReached = sample.plateOk && sample.plateC >= target - STAGE_TARGET_REACHED_TOLERANCE_C;
+    if (targetReached) {
+      if (_targetReachCandidateMs == 0) {
+        _targetReachCandidateMs = now;
+      } else if (now - _targetReachCandidateMs >= STAGE_TARGET_REACHED_CONFIRM_MS) {
+        _holdStartMs = now;
+        _targetReachCandidateMs = 0;
+        _alerts.beep(80);
+      }
+    } else {
+      _targetReachCandidateMs = 0;
+    }
   }
 
   uint16_t holdTarget = holdTargetSeconds(settings);
@@ -261,6 +277,7 @@ void ReflowController::enterState(ReflowState state, uint32_t now) {
   _state = state;
   _stageStartMs = now;
   _holdStartMs = 0;
+  _targetReachCandidateMs = 0;
   _lastControlMs = 0;
   _heatWatchStartMs = 0;
   _heater.reset();
@@ -280,6 +297,7 @@ void ReflowController::enterFault(FaultReason reason, uint32_t now) {
   _state = ReflowState::Fault;
   _faultReason = reason;
   _holdStartMs = 0;
+  _targetReachCandidateMs = 0;
   _heatWatchStartMs = 0;
   if (timedCooldownFault()) {
     keepFanOn(now);

@@ -78,6 +78,7 @@ private:
   FaultReason _faultReason = FaultReason::None;
   uint32_t _stageStartMs = 0;
   uint32_t _holdStartMs = 0;
+  uint32_t _targetReachCandidateMs = 0;
   uint32_t _lastControlMs = 0;
   uint32_t _heatWatchStartMs = 0;
   uint32_t _forcedFanUntilMs = 0;

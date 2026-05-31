@@ -10,7 +10,7 @@ ReflowDesk is a small desktop SMD reflow soldering hot plate designed for makers
 
 The project is currently in active development. The first hardware revision, **ReflowDesk AT-MK1**, is available as early hardware manufacturing files for prototype validation.
 
-Current firmware version: **v0.9.2**.
+Current firmware version: **v0.9.3**.
 
 ---
 
@@ -56,7 +56,7 @@ ReflowDesk is intended to sit on a workbench and provide a controlled heating su
 - Configurable OLED display brightness with OLED GUI and Web Interface controls.
 - Web-controlled physical input lock for rotary encoder and push-button controls.
 - Optional Web Interface mode to keep the OLED display off while physical controls are locked.
-- Cooling fan support with speed control and fan status monitoring.
+- Cooling fan support with speed control, fan status monitoring, and configurable tachometer filtering for realistic RPM telemetry.
 - ReflowDesk AT-MK1 motherboard cooling fan support with independent PWM/tach monitoring.
 - Ambient and motherboard NTC temperature sensing support on AT-MK1 hardware.
 - Improved temperature sensor validation for MAX6675 thermocouple and ADS1115 NTC readings.
@@ -66,6 +66,7 @@ ReflowDesk is intended to sit on a workbench and provide a controlled heating su
 - Configurable RGB Status LED color order through `RGB_LED_COLOR_ORDER` in `src/config.h` for boards using different NeoPixel color orders.
 - Configurable buzzer sound level for user alerts and process notifications.
 - Safety cutoff support for over-temperature and fault conditions.
+- Stage hold timers start only after the measured plate temperature reaches the active stage target and remains confirmed.
 - Mode-selectable PID heater output for zero-cross AC SSR builds and low-voltage DC MOSFET PWM builds.
 - Time-proportional PID heater control for zero-cross SSR driven AC PTC heating elements.
 - 1 kHz 10-bit DC heater PWM mode for EL817-isolated MOSFET driven DC PTC heating elements.
@@ -97,6 +98,7 @@ ReflowDesk is intended to sit on a workbench and provide a controlled heating su
 | v0.9.0 | Added control logic for DC PTC heating element. Added compile-time DC PTC heater PWM mode while preserving the default AC SSR time-window heater mode. DC mode drives `HEATER_CTRL` with 1 kHz, 10-bit LEDC PWM and uses the existing PID controller, safety shutdown, abort, and cooldown paths. Added mode-aware heater telemetry for Web, OLED, and serial output so AC builds report SSR output and DC builds report MOSFET/PWM output. Added the `at-mk1-dcptc` and `development2-dcptc` build environments for AT-MK1/ESP32-S3 DC PTC heater firmware builds. |
 | v0.9.1 | Added heater-type-specific default PID values for 220V AC PTC, 12V DC PTC, and 24V DC PTC firmware builds. Fixed PID runtime configuration so Web/OLED/NVS PID settings are stored in the heater controller and used by the PID loop instead of trying to mutate compile-time constants. Fresh settings and factory-reset defaults now pull PID values from `src/config.h` through `HeaterTuning`, while existing saved NVS PID settings remain preserved until changed by the user. |
 | v0.9.2 | Added DC PTC heater PWM approach duty caps for MOSFET builds. DC mode now limits maximum PWM duty in configurable far, mid, and near target-approach bands to reduce thermal coast on low-voltage PTC heaters while still allowing the reflow target to be reached. The cap logic is DC-only, leaves AC SSR time-window behavior unchanged, keeps PID anti-windup aware of the active duty ceiling, and adds compile-time sanity checks for cap band and duty ordering. |
+| v0.9.3 | Fixed false stage target-reached triggers so preheat, soak, and reflow hold timers start only after the measured plate temperature reaches the active target and remains confirmed. Fixed cooling fan RPM reporting so tach readings are forced to zero when fan power/PWM is off. Improved fan tachometer filtering by rejecting implausibly fast tach edges, ignoring impossible RPM samples, and smoothing accepted readings for realistic Web/OLED/serial RPM telemetry. |
 
 ---
 
@@ -193,6 +195,10 @@ Firmware v0.9.2 adds DC-only approach duty caps for MOSFET PWM builds. The cap v
 Initial v0.9.0 DC validation was completed with a 24V DC PTC heater on the JP3/MOSFET path. The existing PID values were able to reach and hold the low-temperature `Sn42Bi58 lead-free` profile reflow target closely, while preheat and soak behavior showed the expected dependency on heater wattage and plate thermal mass. For a different 12V/24V heater, keep the same firmware output mode but retune profiles or PID values if the ramp rate, overshoot, or soak settling behavior changes.
 
 Firmware v0.9.2 validation with the same 24V DC PTC heater and `Sn42Bi58 lead-free` profile confirmed the current approach-cap set reaches the 155°C reflow target, keeps reflow overshoot low, and forces heater output off during cooldown. Different DC heater wattages, plate mass, insulation, and thermocouple placement can still require PID, profile, or approach-cap tuning.
+
+Firmware v0.9.3 validation confirmed that stage target-reached notifications and hold timers wait for the measured plate temperature to reach the set target, cooling fan RPM remains zero while fan power is off, and fan-on tach readings remain within the configured realistic range for the tested 12V 4-wire PWM cooling fan.
+
+Fan tachometer RPM limits are configurable in `src/config.h` through `FanTuning::HOT_PLATE_MAX_VALID_RPM` and `FanTuning::BOARD_MAX_VALID_RPM`. Set these values to match the installed fan models with some margin, especially if the enclosure design uses smaller 40 mm or 60 mm fans with higher rated RPM than the current bench-test fan.
 
 ---
 
@@ -345,7 +351,7 @@ Firmware builds run `scripts/merge_factory_bin.py` as a PlatformIO post-build sc
 After a successful build, the script writes merged factory images to `release_bins/`. The output filename includes the configured release board name, detected flash size, firmware version, and release suffix, for example:
 
 ```text
-ReflowDesk_AT-MK1_8MB_v0.9.2-beta.1_factory.bin
+ReflowDesk_AT-MK1_8MB_v0.9.3-beta.1_factory.bin
 ```
 
 The merged image combines the bootloader, partition table, Arduino `boot_app0.bin`, and app firmware at the standard offsets `0x0`, `0x8000`, `0xE000`, and `0x10000`. Use these factory binaries for fresh serial flashing at offset `0x0`.
