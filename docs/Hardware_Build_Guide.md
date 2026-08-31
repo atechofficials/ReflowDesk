@@ -8,7 +8,7 @@ Available Interactive BOM Files:
 | File Name | Hardware |
 | --- | --- |
 | [ReflowDesk_AT-MK1_v1.0_ibom.html](../hardware/ReflowDesk_v1/bom/ReflowDesk_AT-MK1_v1.0_ibom.html) | ReflowDesk AT-MK1 Motherboard v1.0 |
-| [ReflowDesk_AT-MK1_Daughterboard_v1.0_ibom.html](../hardware/ReflowDesk_MK1_Daughterboard_v1/bom/ReflowDesk_AT-MK1_Daughterboard_v1.0_ibom.html) | ReflowDesk AT-MK1 Daughterboard Rev1.0 PCB |
+| [ReflowDesk_AT-MK1_Daughterboard_v1.0_ibom.html](../hardware/ReflowDesk_Daughterboard_v1/bom/ReflowDesk_AT-MK1_Daughterboard_v1.0_ibom.html) | ReflowDesk AT-MK1 Daughterboard Rev1.0 PCB |
 
 ---
 
